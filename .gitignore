@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+
+# scratch files from debugging sessions
+_*.mjs
+*.tmp

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>CELADON — The Long Ash</title>
+<meta name="description" content="A 3D pottery game. Throw, trim, glaze and fire vessels in the ninth winter of the Long Ash." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8F%BA%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="./src/ui/style.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="gl"></canvas>
+  <!-- the interface, made of clay: sits between the studio and the HUD -->
+
+  <!-- ================= HUD ================= -->
+  <div id="hud">
+
+    <header id="hud-top">
+      <div id="stage-block">
+        <div id="stage-name">THE WHEEL</div>
+        <div id="stage-hint">Center the clay before you open it.</div>
+      </div>
+      <div id="ledger">
+        <div class="led"><span class="led-k">DAY</span><span class="led-v" id="led-day">1</span></div>
+        <div class="led"><span class="led-k">ASH-MARKS</span><span class="led-v" id="led-coin">0</span></div>
+        <div class="led"><span class="led-k">STANDING</span><span class="led-v" id="led-rep">Unproven</span></div>
+      </div>
+    </header>
+
+    <!-- Commission card -->
+    <aside id="commission" class="panel">
+      <div class="panel-h"><span class="glyph">◈</span> COMMISSION</div>
+      <div id="com-title">—</div>
+      <div id="com-from">—</div>
+      <div id="formview">
+        <canvas id="silho" width="480" height="330"></canvas>
+        <div id="silho-key">
+          <span><i class="k-target"></i> asked for</span>
+          <span><i class="k-now"></i> yours</span>
+        </div>
+      </div>
+      <ul id="com-reqs"></ul>
+      <p id="com-text"></p>
+    </aside>
+
+    <!-- Live instrument gauges -->
+    <aside id="gauges" class="panel">
+      <div class="panel-h"><span class="glyph">◎</span> THE BODY</div>
+      <div class="gauge" data-g="rpm">   <label>WHEEL</label>      <div class="bar"><i></i></div><span class="gv">0</span></div>
+      <div class="gauge" data-g="water"> <label>MOISTURE</label>   <div class="bar"><i></i></div><span class="gv">0</span></div>
+      <div class="gauge" data-g="wall">  <label>THINNEST WALL</label><div class="bar"><i></i></div><span class="gv">0</span></div>
+      <div class="gauge" data-g="center"><label>TRUENESS</label>   <div class="bar"><i></i></div><span class="gv">0</span></div>
+      <div class="gauge" data-g="stress"><label>STRESS</label>     <div class="bar"><i></i></div><span class="gv">0</span></div>
+      <div id="vitals">
+        <span>H <b id="v-h">0</b>cm</span>
+        <span>Ø <b id="v-d">0</b>cm</span>
+        <span>CLAY <b id="v-m">0</b>g</span>
+      </div>
+    </aside>
+
+    <!-- What the hand is about to do, floating by the cursor -->
+    <div id="hand"><span id="hand-verb">CENTRE</span><i><b></b></i></div>
+
+
+    <!-- The one thing to do next -->
+    <div id="coach"><span id="coach-step"></span><span id="coach-text"></span></div>
+
+    <!-- Tool belt -->
+    <nav id="tools"></nav>
+
+    <!-- Contextual right panel (glaze / kiln) -->
+    <aside id="context" class="panel hidden"></aside>
+
+    <footer id="hud-bottom">
+      <div id="keyhints"></div>
+      <button id="advance" class="btn primary">Continue <kbd>↵</kbd></button>
+    </footer>
+
+    <div id="toasts"></div>
+  </div>
+
+  <!-- ================= OVERLAY ================= -->
+  <div id="overlay">
+    <div id="ov-inner"></div>
+  </div>
+
+  <div id="boot">
+    <div id="boot-mark">
+      <svg viewBox="0 0 120 120" width="120" height="120" aria-hidden="true">
+        <defs><linearGradient id="bg1" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#3F9C81"/><stop offset="1" stop-color="#1F6B57"/></linearGradient></defs>
+        <path id="boot-pot" fill="url(#bg1)" d="M42 30 h36 l-4 8 c12 8 18 20 18 32 c0 18-14 30-32 30 s-32-12-32-30 c0-12 6-24 18-32 z"/>
+      </svg>
+    </div>
+    <div id="boot-title">CELADON</div>
+    <div id="boot-sub">THE LONG ASH</div>
+    <div id="boot-bar"><i></i></div>
+    <div id="boot-status">lighting the shed</div>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+<noscript><p style="position:fixed;inset:0;z-index:50;margin:0;display:grid;place-content:center;text-align:center;background:var(--ash-2,#F4E7D2);color:var(--ink,#4A3524);font:700 17px/1.7 system-ui;padding:2rem">CELADON needs JavaScript switched on.</p></noscript>
+</body>
+</html>

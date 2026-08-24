@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>CELADON — interface check</title>
+<link rel="stylesheet" href="./src/ui/style.css" />
+<style>
+  /* stand-in for the 3D view so the HUD has something to sit on */
+  #gl{background:
+    radial-gradient(ellipse at 42% 62%, #2a2622 0%, #14120f 42%, #08090a 78%);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="gl"></canvas>
+
+  <div id="hud" class="hidden">
+    <header id="hud-top">
+      <div id="stage-block">
+        <div id="stage-name">THE WHEEL</div>
+        <div id="stage-hint"></div>
+      </div>
+      <div id="ledger">
+        <div class="led"><span class="led-k">DAY</span><span class="led-v" id="led-day">1</span></div>
+        <div class="led"><span class="led-k">ASH-MARKS</span><span class="led-v" id="led-coin">55</span></div>
+        <div class="led"><span class="led-k">STANDING</span><span class="led-v" id="led-rep">Unproven</span></div>
+      </div>
+    </header>
+
+    <aside id="commission" class="panel">
+      <div class="panel-h"><span class="glyph">◈</span> COMMISSION</div>
+      <div id="com-title">—</div>
+      <div id="com-from">—</div>
+      <div id="formview">
+        <canvas id="silho" width="480" height="330"></canvas>
+        <div id="silho-key">
+          <span><i class="k-target"></i> asked for</span>
+          <span><i class="k-now"></i> yours</span>
+        </div>
+      </div>
+      <ul id="com-reqs"></ul>
+      <p id="com-text"></p>
+    </aside>
+
+    <aside id="gauges" class="panel">
+      <div class="panel-h"><span class="glyph">◎</span> THE BODY</div>
+      <div class="gauge" data-g="rpm">   <label>WHEEL</label>      <div class="bar"><i></i></div><span class="gv">0</span></div>
+      <div class="gauge" data-g="water"> <label>MOISTURE</label>   <div class="bar"><i></i></div><span class="gv">0</span></div>
+      <div class="gauge" data-g="wall">  <label>THINNEST WALL</label><div class="bar"><i></i></div><span class="gv">0</span></div>
+      <div class="gauge" data-g="center"><label>TRUENESS</label>   <div class="bar"><i></i></div><span class="gv">0</span></div>
+      <div class="gauge" data-g="stress"><label>STRESS</label>     <div class="bar"><i></i></div><span class="gv">0</span></div>
+      <div id="vitals">
+        <span>H <b id="v-h">0</b>cm</span>
+        <span>Ø <b id="v-d">0</b>cm</span>
+        <span>CLAY <b id="v-m">0</b>g</span>
+      </div>
+    </aside>
+
+    <div id="hand"><span id="hand-verb">CENTRE</span><i><b></b></i></div>
+
+
+    <div id="coach"><span id="coach-step"></span><span id="coach-text"></span></div>
+
+    <nav id="tools"></nav>
+    <aside id="context" class="panel hidden"></aside>
+
+    <footer id="hud-bottom">
+      <div id="keyhints"></div>
+      <button id="advance" class="btn primary">Continue <kbd>↵</kbd></button>
+    </footer>
+    <div id="toasts"></div>
+  </div>
+
+  <div id="overlay"><div id="ov-inner"></div></div>
+</div>
+
+<script type="module">
+import { HUD } from './src/ui/hud.js';
+import { Clay } from './src/sim/clay.js';
+import { COMMISSIONS } from './src/game/lore.js';
+
+// a stand-in for Game: the HUD only ever calls these three
+const stubGame = {
+  advance() {}, selectTool(id) { hud.selectTool(id); },
+  setWheelSpeedFrac(f) { hud.setGauge('rpm', f, String(Math.round(f * 190))); },
+};
+const hud = new HUD(stubGame);
+hud.show(true);
+
+// a plausible pot, part way through
+const clay = new Clay({ mass: 500, seed: 9, wobble: 0.2 });
+clay.sculpt((t) => 0.74 + 0.26 * Math.sin(Math.PI * (0.2 + t * 0.72)), 12.6, 10.2, 0.42, 0.8);
+
+const com = COMMISSIONS[0];
+hud.setToolset('throw', 'hands');
+hud.setCommission(com, { form: { ok: true }, minH: { ok: true }, maxH: { ok: true }, maxWall: { ok: false } });
+hud.setStage('THE WHEEL', 'Put a hand on the clay and move it. Which way you drag is what it does.');
+hud.setLedger({ day: 1, coin: 55, rep: 0 });
+hud.setKeyHints([['DRAG', 'shape the pot'], ['RMB', 'orbit'], ['CTRL+Z', 'take it back'],
+  ['1-4', 'tools'], ['SPACE', 'water'], ['W/S', 'wheel']]);
+hud.setAdvance('Let it set up');
+hud.setGauge('rpm', 0.45, '86');
+hud.setGauge('water', 0.58, '58');
+hud.setGauge('wall', 0.4, '0.44');
+hud.setGauge('center', 0.97, '97');
+hud.setGauge('stress', 0.22, '22');
+hud.setVitals(12.6, 10.2, 500);
+hud.showFormView(true);
+hud.drawSilhouette(clay, com);
+hud.setCoach(4, 'The wall is still heavy. Drag <b>upward</b> to thin it, then widen it back down to size.', false);
+
+// the floating hand label, cycling through the verbs it can show
+const verbs = [['LIFT', 0.8], ['WIDEN', 0.55], ['NARROW', 0.4], ['CENTRE', 0.9], ['OPEN', 0.65], ['STEADY', 0.05]];
+let vi = 0;
+const place = () => {
+  const [v, p] = verbs[vi % verbs.length];
+  hud.setHand(window.innerWidth * 0.52, window.innerHeight * 0.46, v, p, true);
+  vi++;
+};
+place();
+setInterval(place, 1400);
+hud.toast('Hold the left button on the clay and move. Drag <b>up</b> to lift it.', '', 999999);
+window.__ui = { hud, clay, com };
+</script>
+</body>
+</html>

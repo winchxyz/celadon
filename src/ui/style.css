@@ -1,0 +1,621 @@
+@font-face{font-family:Baloo2;src:url(/fonts/baloo2-700.woff2) format('woff2');font-weight:700;font-display:swap}
+@font-face{font-family:Baloo2;src:url(/fonts/baloo2-800.woff2) format('woff2');font-weight:800;font-display:swap}
+@font-face{font-family:NunitoL;src:url(/fonts/nunito-400.woff2) format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:NunitoL;src:url(/fonts/nunito-600.woff2) format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:NunitoL;src:url(/fonts/nunito-700.woff2) format('woff2');font-weight:700;font-display:swap}
+
+/* ============================================================
+   CELADON - The Long Ash
+   Interface skin: kiln-shed dark, celadon glaze accents,
+   ash-white type. No network fonts; system stacks only.
+   ============================================================ */
+
+:root{
+  /* Cream plates, cocoa ink. The panels cover more of the screen than
+     the pot does and they were a blue-black glass cockpit, which is the
+     single loudest thing arguing against a warm room behind them. */
+  --ash-0:#F0E1C8;
+  --ash-1:#FBF0DF;
+  --ash-2:#F4E7D2;
+  --ash-3:#EADCC2;
+  --ash-4:#D9BF98;
+  --line:#E2CDAA;
+  --ink:#4A3524;
+  /* Deep enough to clear 4.5:1 not just on a plate but on a plate with
+     a wash over it — a segmented track, a selected row, a selected tool
+     are all surfaces too, and the same ink measured 5.0 on one and 4.3
+     on the other. */
+  --ink-dim:#755C41;
+  /* Was #A08A6E, 2.93:1 on cream — under the floor for even large text,
+     and it was colouring the grade name, the shelf tiles and whole
+     sentences, not just bullets and keycaps. Darkened, and the content
+     sites moved up to --ink-dim. */
+  --ink-faint:#8A7053;
+
+  /* Two inks, not one. Cocoa is right ON a cream plate and invisible on
+     the room behind it — everything that floats over the 3D view needs
+     the opposite. Getting this wrong is what turned the stage title,
+     the coach and the tool bar into dark text on a dark workshop. */
+  --on-scene:#FBEFDC;
+  --on-scene-dim:#E3D0B4;
+  --scrim:#2a1f18;
+
+  /* Deepened, because the game is named after this colour and it has to
+     hold its own against cream instead of glowing on black. */
+  --celadon:#3F9C81;
+  --celadon-deep:#1F6B57;
+  --oxblood:#a8352c;
+  --tenmoku:#c98b3e;
+  --ember:#FF9E4A;
+  /* --ember glows; it does not read. #FF9E4A on the cream plate is
+     1.82:1, so the one warning that says you cannot afford to light the
+     kiln was invisible at 10px. This is the same fire, inked for paper. */
+  --ember-ink:#9E410C;
+  --ember-hot:#ffd9a0;
+  --cobalt:#5f86d8;
+
+  --ok:#3F9C81;
+  --warn:#C98A2E;
+  --bad:#C4503F;
+  /* --bad is 3.90:1 on cream: fine for the gauge fill and the cross
+     glyph, not for the words in a toast. */
+  --bad-ink:#9E3325;
+
+  /* Aliasing the display face onto --serif reaches all eighteen sites
+     that use it, including the two inline styles in main.js, without
+     editing any of them. */
+  /* Shipped with the game, not fetched. On Windows the whole rounded
+     system stack falls through to Candara, which is a humanist face and
+     not a rounded one — measured, not assumed. */
+  --display: Baloo2, NunitoL, ui-rounded, Candara, "Trebuchet MS", sans-serif;
+  --body: NunitoL, ui-rounded, Candara, "Segoe UI", sans-serif;
+  --serif: var(--display);
+  --sans: var(--display);
+  --mono: ui-monospace,"SF Mono","Cascadia Mono","Segoe UI Mono",Menlo,Consolas,monospace;
+
+  --pad: clamp(10px, 1.4vw, 20px);
+  --r: 16px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#F4E7D2;}
+/* Restored. These went out with the WebGL skin block by accident, and
+   the damage was quiet: the canvas fell into normal flow, which pushed
+   #app to 804 px inside an 800 px window, so the page could scroll by
+   four pixels and the stacking context the HUD sits in was gone. */
+#app{position:fixed;inset:0;overflow:hidden}
+#gl{position:absolute;inset:0;display:block;width:100%;height:100%}
+#hud{position:relative;z-index:2}
+
+/* ============================================================
+   ONE SLAB.
+   ============================================================
+   The interface used to be drawn twice: a WebGL layer underneath
+   painted every panel as a lit lump of clay, and the CSS below was only
+   its fallback. Two languages, and the lumps were the louder one — a
+   400 px panel of body text on a hand-formed slab is not a tablet, it
+   is a boulder, and next to the clean cream cards of the menu and the
+   overlays it read as a different game.
+   So the lumps are gone and there is one family left, the one the menu
+   already used: a cream slab, a hard ledge under it the thickness of
+   the slab, a hairline of light along the top edge, and a soft shadow
+   for the air beneath. Small controls take 18, panels 22, the big
+   overlay card 28 — one idea at three sizes.
+*/
+.slab, .panel, #tools, #coach, #hand{
+  background:var(--ash-1);
+  border:0;
+  box-shadow:0 4px 0 var(--ash-4), 0 14px 28px rgba(46,33,24,.20), inset 0 1px 0 #fff9;
+}
+
+.slab, .panel{ border-radius:22px; }
+.panel{
+  position:absolute;
+  padding:calc(var(--pad)*0.95);
+}
+.panel-h{
+  font:800 11px/1 var(--display);
+  letter-spacing:.16em;
+  color:var(--ink-dim);
+  text-transform:uppercase;
+  display:flex;align-items:center;gap:.5em;
+  margin-bottom:.85em;
+}
+.panel-h .glyph{color:var(--celadon-deep)}
+
+/* Carried by #context, #overlay and #commission. Deleting this by
+   accident does not look like a style bug — it looks like panels that
+   will not go away. */
+.hidden{display:none !important}
+
+/* ---------------- HUD frame ---------------- */
+/* visibility, not display. show() removed `hidden` and added `on` in the
+   same statement, so the .6s fade never ran and every panel in the game
+   popped in on one frame. visibility interpolates discretely but stays
+   `visible` throughout whenever either endpoint is, so it appears at once
+   on the way in and only latches off after the fade out. */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .6s ease, visibility .6s}
+#hud.on{opacity:1;visibility:visible}
+#hud .panel, #hud nav, #hud button, #hud .clickable{pointer-events:auto}
+
+#hud-top{
+  position:absolute;top:0;left:0;right:0;
+  display:flex;justify-content:space-between;align-items:flex-start;
+  padding:var(--pad) calc(var(--pad)*1.4);
+  /* The room is lit high and cream. A dark bar across the top of it,
+     there so pale type could be read against a dark workshop, now reads
+     as letterboxing — so the scrim flips: light veil, cocoa ink. */
+  background:linear-gradient(180deg,rgba(251,240,223,.88) 0%,rgba(251,240,223,.60) 55%,rgba(251,240,223,0) 100%);
+}
+#stage-name{
+  font:400 clamp(20px,2.3vw,34px)/1 var(--serif);
+  letter-spacing:.14em;
+  color:var(--ink);font-weight:800;
+  text-shadow:0 1px 0 #fff8;
+}
+/* While a coach line is up it is saying the same thing as this, one
+   under the other, and two instructions competing is most of why the
+   screen felt busy. The live one wins. */
+#hud.coaching #stage-hint{opacity:0;transition:opacity .3s ease}
+#stage-hint{
+  margin-top:.6em;font:400 12.5px/1.6 var(--sans);
+  letter-spacing:.03em;color:var(--ink-dim);max-width:52ch;font-weight:600;
+  text-shadow:0 1px 0 #fff8;
+}
+#stage-hint b{color:var(--celadon-deep);font-weight:700}
+#ledger{display:flex;gap:1.6em;text-align:right}
+.led{display:flex;flex-direction:column;gap:.35em}
+.led-k{font:700 10px/1 var(--display);letter-spacing:.16em;color:var(--ink-dim)}
+.led-v{font:700 16px/1 var(--display);font-variant-numeric:tabular-nums;color:var(--celadon-deep);letter-spacing:.02em}
+
+/* ---------------- commission ---------------- */
+#commission{
+  left:calc(var(--pad)*1.4);top:19vh;width:min(300px,26vw);
+  max-height:calc(81vh - 104px);overflow:auto;
+}
+#commission::-webkit-scrollbar{width:4px}
+#commission::-webkit-scrollbar-thumb{background:#4A352424;border-radius:3px}
+#com-title{font:400 18px/1.25 var(--serif);letter-spacing:.03em;margin-bottom:.15em}
+#com-from{font:400 11px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--celadon-deep);margin-bottom:.9em}
+#com-text{
+  font:400 12px/1.6 var(--serif);color:var(--ink-dim);font-style:italic;
+  margin:1em 0 0;padding-top:.9em;border-top:1px solid var(--line);
+  display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;
+}
+#com-reqs{list-style:none;display:flex;flex-direction:column;gap:.5em}
+#com-reqs li{
+  display:flex;gap:.6em;align-items:baseline;
+  font:400 11.5px/1.4 var(--sans);color:var(--ink-dim);letter-spacing:.02em;
+}
+#com-reqs li::before{content:"\25CB";color:var(--ink-faint);font-size:9px}
+#com-reqs li.met{color:var(--ink)}
+#com-reqs li.met::before{content:"\25CF";color:var(--celadon-deep)}
+#com-reqs li b{color:var(--ink);font-weight:600}
+
+/* ---------------- gauges ---------------- */
+#gauges{right:calc(var(--pad)*1.4);top:22vh;width:min(266px,24vw)}
+.gauge{display:grid;grid-template-columns:1fr 108px 46px;align-items:center;gap:.7em;margin-bottom:.7em}
+.gauge label{font:700 11px/1 var(--display);letter-spacing:.10em;color:var(--ink-dim)}
+/* Three pixels with a glow is an instrument readout. Twelve with a
+   rounded end is something a hand could have pressed into the bench. */
+.gauge .bar{height:12px;background:var(--ash-3);border-radius:8px;overflow:hidden;position:relative;
+  box-shadow:inset 0 2px 3px #4a352422}
+.gauge .bar i{
+  position:absolute;left:0;top:0;bottom:0;width:0%;
+  background:var(--celadon);border-radius:8px;
+  transition:width .09s linear, background .3s ease;
+}
+.gauge .gv{font:700 13px/1 var(--display);font-variant-numeric:tabular-nums;color:var(--ink);text-align:right}
+.gauge.pedal .bar{
+  height:7px;cursor:ew-resize;pointer-events:auto;
+  background:#4A352420;box-shadow:inset 0 0 0 1px #4A352418;
+}
+.gauge.pedal .bar:hover{background:#4A352433}
+.gauge.pedal label{color:var(--ink-dim)}
+.gauge.warn .bar i{background:var(--warn)}
+.gauge.bad .bar i{background:var(--bad)}
+#vitals{
+  display:flex;justify-content:space-between;gap:.6em;
+  margin-top:.9em;padding-top:.8em;border-top:1px solid var(--line);
+  font:700 11px/1 var(--display);font-variant-numeric:tabular-nums;color:var(--ink-dim);letter-spacing:.03em;
+}
+#vitals b{color:var(--ink);font-weight:800}
+
+/* ---------------- tools ---------------- */
+#tools{
+  position:absolute;left:50%;transform:translateX(-50%);
+  bottom:calc(var(--pad)*3.4);
+  display:flex;gap:6px;
+  padding:7px;border-radius:22px;
+}
+.tool{
+  width:62px;height:64px;border:0;border-radius:12px;
+  background:transparent;color:var(--ink-dim);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  cursor:pointer;position:relative;
+  transition:background .18s ease,color .18s ease,transform .18s cubic-bezier(.2,.9,.3,1);
+}
+.tool svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.35;stroke-linecap:round;stroke-linejoin:round}
+.tool .tl{font:700 9px/1 var(--display);letter-spacing:.10em}
+.tool .tk{
+  position:absolute;top:3px;right:6px;font:700 9px/1 var(--display);color:var(--ink);
+}
+.tool:hover{background:var(--ash-3);color:var(--ink)}
+.tool.sel{background:#3F9C8122;color:var(--celadon-deep);transform:translateY(-3px)}
+.tool.sel::after{
+  content:"";position:absolute;left:12px;right:12px;bottom:2px;height:1px;
+  background:var(--celadon);border-radius:10px;
+}
+.tool[disabled]{opacity:.25;cursor:not-allowed}
+
+/* ---------------- bottom bar ---------------- */
+#hud-bottom{
+  position:absolute;left:0;right:0;bottom:0;
+  display:flex;justify-content:space-between;align-items:center;
+  padding:var(--pad) calc(var(--pad)*1.4);
+  background:linear-gradient(0deg,rgba(251,240,223,.88) 0%,rgba(251,240,223,.58) 58%,rgba(251,240,223,0) 100%);
+}
+#keyhints{font:600 11px/1.7 var(--display);color:var(--ink-dim);letter-spacing:.04em;pointer-events:none;text-shadow:0 1px 0 #fff8}
+#keyhints b{color:var(--ink);font-weight:800}
+
+/* The same slab the menu tablets are made of.
+   .btn was a cream fill on a cream card with a 1.56:1 hairline round it —
+   the label read fine, but nothing said it could be pushed. These reuse
+   the drop and the press already proven on .menu button, so the two
+   button families are one family, and primary gets its own darker ledge
+   instead of a cream one showing under a celadon slab. */
+.btn{
+  font:800 11px/1 var(--display);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink);background:var(--ash-2);
+  border:0;border-radius:var(--r);
+  padding:1.05em 1.6em;cursor:pointer;
+  display:inline-flex;align-items:center;gap:.7em;
+  box-shadow:0 3px 0 var(--ash-4), 0 9px 20px rgba(46,33,24,.16), inset 0 1px 0 #fff9;
+  transition:transform .14s cubic-bezier(.2,.9,.3,1), box-shadow .14s ease, background .14s ease;
+}
+.btn:hover{background:var(--ash-1);transform:translateY(-2px);
+  box-shadow:0 5px 0 var(--ash-4), 0 13px 26px rgba(46,33,24,.20), inset 0 1px 0 #fff}
+.btn:active{transform:translateY(3px);
+  box-shadow:0 0 0 var(--ash-4), 0 3px 8px rgba(46,33,24,.18), inset 0 2px 7px rgba(46,33,24,.20)}
+.btn.primary{color:#FBF0DF;background:var(--celadon-deep);
+  box-shadow:0 3px 0 #14483A, 0 9px 20px rgba(31,107,87,.30), inset 0 1px 0 #ffffff33}
+.btn.primary:hover{background:var(--celadon);
+  box-shadow:0 5px 0 #14483A, 0 13px 26px rgba(31,107,87,.34), inset 0 1px 0 #ffffff44}
+.btn.primary:active{box-shadow:0 0 0 #14483A, inset 0 2px 7px rgba(0,0,0,.22)}
+.btn.ghost{background:transparent;color:var(--ink-dim);
+  box-shadow:inset 0 0 0 2px var(--ash-4)}
+.btn.ghost:hover{transform:none;background:var(--ash-2);color:var(--ink);
+  box-shadow:inset 0 0 0 2px var(--celadon-deep)}
+.btn.ghost:active{transform:translateY(2px);
+  box-shadow:inset 0 0 0 2px var(--ash-4), inset 0 2px 6px rgba(46,33,24,.16)}
+.btn[disabled]{opacity:.3;pointer-events:none;box-shadow:0 2px 0 var(--ash-4)}
+.btn kbd{
+  font:400 9px/1 var(--mono);border:1px solid currentColor;border-radius:10px;
+  padding:.28em .42em;opacity:.6;
+}
+
+/* ---------------- context panel (glaze / kiln) ---------------- */
+/* Bottom-anchored, not fixed-height.
+   `top: 22vh + 250px` with `max-height: 52vh` puts the foot of this
+   panel at 74vh + 250px — past the bottom of any window shorter than
+   about 960px. On a 800px-tall screen the last three glazes rendered
+   below the viewport with no way to scroll to them, so a third of the
+   glaze palette was unreachable. Pinning the bottom instead makes the
+   panel exactly as tall as the space actually available, and the
+   internal overflow does the rest. */
+#context{
+  right:calc(var(--pad)*1.4);
+  top:calc(22vh + 250px);
+  bottom:calc(var(--pad)*4.6);
+  width:min(266px,24vw);
+  overflow:auto;
+}
+#context::-webkit-scrollbar{width:5px}
+#context::-webkit-scrollbar-thumb{background:#4A352428;border-radius:3px}
+
+.glaze-list{display:flex;flex-direction:column;gap:3px}
+.glaze{
+  display:grid;grid-template-columns:22px 1fr auto;gap:.7em;align-items:center;
+  padding:.55em .5em;border-radius:10px;cursor:pointer;border:1px solid transparent;
+  transition:background .16s ease,border-color .16s ease;
+}
+.glaze:hover{background:#4A35240f}
+.glaze.sel{background:#4A35240d;border-color:#4A352433}
+.glaze .sw{
+  width:22px;height:22px;border-radius:50%;
+  /* Cocoa, not black. At 47% black the dark glazes — tenmoku, cobalt,
+     oxblood — all crushed toward the same flat black and could not be told
+     apart, on the one control the whole glazing phase runs through. */
+  box-shadow:inset 0 -3px 7px #4A352433, inset 0 3px 5px #FFFFFF55, 0 0 0 2px var(--ash-4);
+}
+.glaze .gn{font:400 12px/1.25 var(--serif);letter-spacing:.02em}
+.glaze .gt{font:400 9px/1.2 var(--sans);letter-spacing:.1em;color:var(--ink);text-transform:uppercase}
+.glaze.sel .gn{color:var(--celadon-deep)}
+.glaze .lock{font:400 9px/1 var(--mono);color:var(--ink-dim)}
+.glaze.locked{opacity:.32;cursor:not-allowed}
+
+.slider-row{margin:.85em 0}
+.slider-row label{
+  display:flex;justify-content:space-between;
+  font:600 9px/1 var(--sans);letter-spacing:.16em;color:var(--ink-dim);
+  text-transform:uppercase;margin-bottom:.55em;
+}
+.slider-row label span{font-family:var(--mono);letter-spacing:0;color:var(--celadon-deep)}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:16px;background:transparent;cursor:pointer;
+}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:#4A35242e;border-radius:10px}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:11px;height:11px;border-radius:50%;
+  background:var(--celadon);margin-top:-4.5px;box-shadow:0 0 10px #8fd6bd80;
+}
+input[type=range]::-moz-range-track{height:2px;background:#4A35242e;border-radius:10px}
+input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radius:50%;background:var(--celadon)}
+
+.seg{display:flex;gap:2px;background:#4A35240d;padding:2px;border-radius:10px}
+.seg button{
+  flex:1;border:0;background:transparent;color:var(--ink);cursor:pointer;
+  /* 8px = the track's 10px radius minus its 2px padding. At 1px the
+     selected chip showed four square corners inside a pill. The type
+     stays at 10px/.08em because at the 900px breakpoint #context is
+     190px wide and anything wider makes "Natural" overflow the panel. */
+  font:600 10px/1 var(--sans);letter-spacing:.08em;padding:.75em .2em;border-radius:8px;white-space:nowrap;
+  transition:all .18s ease;
+}
+.seg button:hover{color:var(--ink)}
+/* The track is inset; the chosen chip stands proud of it. It used to be
+   a DARKER wash than the track, which is a hole rather than a button —
+   and celadon on 12.5% ink came to 4.2:1 at 10px. */
+.seg button.sel{
+  background:var(--ash-1);color:var(--celadon-deep);
+  box-shadow:0 1px 0 var(--ash-4), 0 2px 4px rgba(46,33,24,.14);
+}
+
+.readout{font:400 10px/1.7 var(--mono);color:var(--ink);letter-spacing:.03em}
+.readout .k{color:var(--ink-dim);font-weight:700}
+.readout .hot{color:var(--ember-ink);font-weight:700}
+
+/* firing curve canvas */
+/* The firing curve is the most consequential picture in the game and it
+   was drawn on a 33%-black slab inset in a cream panel — the grid and the
+   crystal band are both authored at 0.10 cocoa and vanished on it. A well
+   one step under the plate, with the same 2px ring every other plate has. */
+#curve{width:100%;height:96px;display:block;margin:.4em 0 .8em;border:2px solid var(--ash-4);border-radius:10px;background:var(--ash-2)}
+
+/* ---------------- toasts ---------------- */
+#toasts{
+  position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--pad)*7.5);
+  display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none;
+}
+.toast{
+  font:400 12px/1.4 var(--serif);letter-spacing:.05em;
+  padding:.75em 1.5em;border-radius:16px;
+  background:var(--ash-1);border:2px solid var(--ash-4);
+  color:var(--ink);
+  animation:toastin .45s cubic-bezier(.2,.9,.3,1) both;
+  /* One shadow. This was declared twice and the second won, so the
+     slab lost the offset underside every other plate has. */
+  box-shadow:0 6px 0 -1px var(--ash-4), 0 18px 34px -20px rgba(46,33,24,.5);
+  max-width:60ch;text-align:center;
+}
+.toast.good{border-color:#8fd6bd55;color:var(--celadon-deep)}
+.toast.bad{border-color:#e2685c55;color:var(--bad-ink)}
+.toast.hot{border-color:#ff8a3d55;color:var(--ember-ink)}
+.toast.out{animation:toastout .5s ease forwards}
+@keyframes toastin{from{opacity:0;transform:translateY(-10px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes toastout{to{opacity:0;transform:translateY(-8px);filter:blur(3px)}}
+
+/* ---------------- overlay ---------------- */
+#overlay{
+  position:absolute;inset:0;display:none;place-items:center;
+  /* Warm, and only just dark enough to sit the card off the room. This
+     was a near-black radial gradient — the last of the old cockpit —
+     and every word on top of it is cocoa ink, so the whole menu was
+     dark type on a dark wash and effectively invisible. */
+  background:rgba(46,33,24,.44);
+  backdrop-filter:blur(7px);z-index:20;
+}
+#overlay.on{display:grid;animation:fadein .55s cubic-bezier(.2,.9,.3,1) both}
+#overlay.soft{
+  /* The title keeps the piece on the wheel in shot, so the scrim is
+     weighted to the left where the words are and clears away to
+     nothing across the vase. */
+  background:linear-gradient(100deg,rgba(46,33,24,.50) 0%,rgba(46,33,24,.38) 38%,
+                             rgba(46,33,24,.10) 66%,rgba(46,33,24,0) 100%);
+  backdrop-filter:blur(1.5px);
+}
+#ov-inner{
+  width:min(880px,90vw);max-height:88vh;overflow:auto;
+  padding:clamp(26px,3.4vw,52px);
+  /* A slab of the same cream the panels are made of. The WebGL clay
+     layer sits below the overlay in the stack, so a plate drawn there
+     would be dimmed by this scrim; this is the same material painted
+     where it can actually be seen. */
+  background:var(--ash-1);
+  color:var(--ink);
+  border-radius:28px;
+  box-shadow:0 22px 52px rgba(46,33,24,.34), inset 0 2px 0 #fff9;
+  animation:rise .55s cubic-bezier(.2,.9,.3,1) both;
+}
+/* The title keeps the piece on the wheel in the picture, so its card is
+   narrower and sits over to the left, leaving the pot somewhere to be. */
+#overlay.soft #ov-inner{
+  width:min(520px,52vw);
+  margin-right:auto;margin-left:clamp(16px,5vw,72px);
+}
+#ov-inner::-webkit-scrollbar{width:6px}
+#ov-inner::-webkit-scrollbar-thumb{background:#4A352428;border-radius:3px}
+/* Restored: #overlay.on names this, and without it the warm scrim popped
+   in at full strength on frame one while the card inside it faded and rose
+   over .55s — a flash behind a soft entrance. */
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+@keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+
+.ov-kicker{font:600 10px/1 var(--sans);letter-spacing:.34em;color:var(--celadon-deep);text-transform:uppercase;margin-bottom:1.1em}
+.ov-title{font:400 clamp(30px,4.3vw,58px)/1.05 var(--serif);letter-spacing:.02em;margin-bottom:.4em}
+.ov-sub{font:400 14px/1.75 var(--serif);color:var(--ink-dim);font-style:italic;max-width:62ch;margin-bottom:2em}
+.ov-body{font:400 14px/1.85 var(--serif);color:var(--ink-dim);max-width:64ch}
+.ov-body p{margin-bottom:1.1em}
+.ov-body em{color:var(--celadon-deep);font-style:italic}
+.ov-actions{display:flex;gap:12px;margin-top:2.2em;flex-wrap:wrap}
+
+/* score sheet */
+.score-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,2.6vw,42px);align-items:start}
+.score-rows{display:flex;flex-direction:column;gap:.15em}
+.srow{display:grid;grid-template-columns:1fr 120px 46px;gap:1em;align-items:center;padding:.72em 0;border-bottom:1px solid var(--line)}
+.srow .sk{font:600 10px/1 var(--sans);letter-spacing:.16em;color:var(--ink-dim);text-transform:uppercase}
+.srow .sb{height:2px;background:#4A35241c;border-radius:10px;overflow:hidden}
+.srow .sb i{display:block;height:100%;width:0;background:var(--celadon);box-shadow:0 0 8px var(--celadon);transition:width .9s cubic-bezier(.2,.9,.3,1)}
+.srow .sv{font:400 13px/1 var(--mono);text-align:right;color:var(--ink)}
+.srow.total{border-bottom:0;margin-top:.6em;padding-top:1.1em;border-top:1px solid #4A352436}
+.srow.total .sk{color:var(--ink);font-size:11px}
+.srow.total .sv{font-size:20px;color:var(--celadon-deep)}
+.grade{
+  font:400 clamp(56px,8vw,110px)/.9 var(--serif);
+  color:var(--celadon-deep);letter-spacing:-.02em;
+  text-shadow:0 0 60px #8fd6bd30;
+}
+.grade small{display:block;font:600 10px/1 var(--sans);letter-spacing:.3em;color:var(--ink-dim);margin-top:1.2em;text-transform:uppercase}
+.notes{list-style:none;margin-top:1.6em;display:flex;flex-direction:column;gap:.6em}
+.notes li{font:400 12.5px/1.6 var(--serif);color:var(--ink-dim);display:flex;gap:.7em;align-items:baseline}
+.notes li::before{content:"\2014";color:var(--ink-faint)}
+.notes li.good::before{content:"\2726";color:var(--celadon-deep)}
+.notes li.bad::before{content:"\2715";color:var(--bad)}
+
+/* gallery */
+.shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(146px,1fr));gap:14px;margin-top:1.6em}
+.piece{
+  border:1px solid var(--line);border-radius:10px;padding:12px;background:#4A352408;
+  transition:all .22s ease;
+}
+.piece:hover{background:#4A352412;border-color:#4A35243d;transform:translateY(-2px)}
+.piece canvas{width:100%;height:112px;display:block}
+.piece .pn{font:400 12px/1.3 var(--serif);margin-top:.7em}
+.piece .pg{font:400 9px/1 var(--mono);color:var(--ink-dim);margin-top:.4em;letter-spacing:.08em}
+
+/* menu list */
+/* Pressable tablets. These were borderless text rows with a one pixel
+   left rule, which is a navigation list on a dark site; nothing about
+   them said "this is a thing you push". The drop under each one is the
+   thickness of the slab, and pressing takes it away. */
+.menu{display:flex;flex-direction:column;gap:10px;margin-top:1.7em}
+.menu button{
+  text-align:left;border:0;cursor:pointer;color:var(--ink);
+  background:var(--ash-2);
+  padding:1.0em 1.25em;border-radius:18px;
+  font:700 18px/1.15 var(--display);letter-spacing:.01em;
+  display:flex;justify-content:space-between;align-items:center;gap:1.2em;
+  box-shadow:0 3px 0 var(--ash-4), 0 9px 20px rgba(46,33,24,.16), inset 0 1px 0 #fff9;
+  transition:transform .14s cubic-bezier(.2,.9,.3,1), box-shadow .14s ease, background .14s ease;
+}
+.menu button:hover{
+  background:var(--ash-1);transform:translateY(-2px);
+  box-shadow:0 5px 0 var(--ash-4), 0 13px 26px rgba(46,33,24,.20), inset 0 1px 0 #fff;
+}
+.menu button:active{
+  transform:translateY(3px);
+  box-shadow:0 0 0 var(--ash-4), 0 3px 8px rgba(46,33,24,.18), inset 0 2px 7px rgba(46,33,24,.20);
+}
+.menu button small{
+  font:800 10px/1 var(--display);color:var(--celadon-deep);
+  letter-spacing:.16em;white-space:nowrap;
+}
+.menu button[disabled]{opacity:.42;pointer-events:none;box-shadow:0 2px 0 var(--ash-4)}
+
+/* lore card */
+.lore-card{
+  border-left:2px solid var(--celadon-deep);padding:.2em 0 .2em 1.5em;margin:1.6em 0;
+}
+.lore-card .lc-h{font:600 9px/1 var(--sans);letter-spacing:.28em;color:var(--celadon-deep);text-transform:uppercase;margin-bottom:.9em}
+.lore-card p{font:400 14px/1.85 var(--serif);color:var(--ink-dim);font-style:italic}
+
+/* ---------------- boot ---------------- */
+#boot{
+  position:absolute;inset:0;z-index:40;display:grid;place-content:center;justify-items:center;
+  /* The first thing anybody sees. It was a black void with a green bar
+     in it, which belongs to a different game than the one that loads
+     behind it. */
+  background:radial-gradient(ellipse at 50% 42%, #FBF0DF, #E8D6B8 78%);
+  transition:opacity .9s ease,visibility .9s;
+}
+#boot.gone{opacity:0;visibility:hidden;pointer-events:none}
+#boot-mark{filter:drop-shadow(0 10px 18px rgba(46,33,24,.22));animation:breathe 3.4s ease-in-out infinite}
+@keyframes breathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.045);opacity:1}}
+#boot-title{font:700 clamp(38px,6vw,74px)/1 var(--display);letter-spacing:.34em;margin:.7em 0 0 .4em;color:var(--ink)}
+#boot-sub{font:700 11px/1 var(--display);letter-spacing:.5em;color:var(--celadon-deep);margin:1.3em 0 2.6em .5em}
+#boot-bar{width:min(260px,52vw);height:10px;border-radius:6px;background:var(--ash-3);box-shadow:inset 0 2px 5px rgba(46,33,24,.20);overflow:hidden}
+#boot-bar i{display:block;height:100%;width:0;border-radius:6px;background:var(--celadon);transition:width .45s ease}
+#boot-status{font:700 10px/1 var(--display);letter-spacing:.22em;color:var(--ink-dim);margin-top:1.5em;text-transform:uppercase}
+
+/* cursor states while working */
+body.grabbing canvas#gl{cursor:none}
+
+@media (max-width:900px){
+  #commission{display:none}
+  #gauges{width:190px;top:15vh}
+  #context{top:calc(15vh + 230px);bottom:calc(var(--pad)*4.6);width:190px}
+  .tool{width:48px;height:54px}
+  .score-grid{grid-template-columns:1fr}
+}
+
+/* ---------------- the hand: what a press will do ---------------- */
+#hand{
+  position:absolute;z-index:6;pointer-events:none;
+  transform:translate(18px,-50%);
+  display:none;align-items:center;gap:.55em;
+  padding:.45em .75em;border-radius:14px;
+  box-shadow:0 3px 0 var(--ash-4), 0 8px 16px rgba(46,33,24,.18), inset 0 1px 0 #fff9;
+  white-space:nowrap;
+}
+#hand.on{display:flex}
+#hand-verb{
+  font:800 10.5px/1 var(--display);letter-spacing:.14em;color:var(--celadon-deep);
+  text-transform:uppercase;
+}
+#hand i{display:block;width:46px;height:6px;background:var(--ash-3);border-radius:4px;overflow:hidden}
+#hand i b{display:block;height:100%;width:0;background:var(--celadon);border-radius:4px}
+#hand.idle{border-color:var(--ash-3)}
+#hand.idle #hand-verb{color:var(--ink-dim)}
+
+/* ---------------- silhouette against the brief ---------------- */
+/* It lives inside the commission panel: the shape asked for belongs
+   next to the words asking for it, and one panel cannot collide with
+   itself on a short screen. */
+#formview{ margin:0 0 1em; }
+#silho{width:100%;height:auto;display:block}
+#silho-key{
+  display:flex;gap:1.1em;margin-top:.7em;padding-top:.7em;border-top:1px solid var(--line);
+  font:600 8.5px/1 var(--sans);letter-spacing:.14em;color:var(--ink-dim);text-transform:uppercase;
+}
+#silho-key span{display:flex;align-items:center;gap:.5em}
+#silho-key i{width:12px;height:2px;border-radius:10px;display:block}
+#silho-key .k-target{background:#5f6b70}
+#silho-key .k-now{background:var(--celadon);box-shadow:0 0 6px var(--celadon)}
+
+/* ---------------- coach line ---------------- */
+/* Slimmer, and lower.
+   Measured against the pot's own screen box, this bar was covering
+   13,000 square pixels of the one object the whole game is about. It now
+   sits in the band between the foot of the pot and the tool bar, and it
+   is a strip rather than a slab. */
+#coach{
+  position:absolute;left:50%;transform:translateX(-50%);
+  bottom:calc(var(--pad)*8);
+  display:flex;align-items:center;gap:.85em;
+  max-width:min(780px,88vw);
+  padding:.68em 1.35em;border-radius:18px;
+  opacity:0;transition:opacity .45s ease;
+  pointer-events:none;
+}
+#coach.on{opacity:1}
+#coach-step{
+  flex:none;width:22px;height:22px;border-radius:50%;
+  border:2px solid var(--celadon-deep);color:var(--celadon-deep);
+  display:grid;place-items:center;
+  font:800 10px/1 var(--display);
+}
+#coach-text{font:600 13px/1.45 var(--display);color:var(--ink);letter-spacing:.01em}
+#coach-text b{color:var(--celadon-deep);font-weight:800}
+#coach.done{border-color:var(--celadon);background:#EAF6F0}
+#coach.done #coach-step{background:var(--celadon);color:#FBF0DF;border-color:var(--celadon)}
+

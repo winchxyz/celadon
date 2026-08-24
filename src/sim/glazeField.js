@@ -1,0 +1,463 @@
+// ============================================================
+//  CELADON — glaze application and flow
+//
+//  Glaze lives in a 2D field wrapped around the vessel:
+//      x = angle around the axis      (wraps)
+//      y = arc position along the meridian, 0 at the foot,
+//          up the outside, over the rim, down the inside to 1
+//
+//  Each cell carries the thickness of up to three glaze layers plus
+//  a wax-resist mask. During the firing the field is integrated
+//  forward in time: molten glaze flows downhill at a rate set by
+//  h^3 / viscosity, which is why a thick coat runs and a thin one
+//  does not, and why the runs always start where the wall is steep.
+// ============================================================
+
+import { clamp, clamp01, lerp, smoothstep, TAU } from '../core/util.js';
+import { SLOTS, viscosity, meltPoint } from './glaze.js';
+import * as THREE from 'three';
+
+export const GW = 192;   // angular cells
+export const GH = 160;   // meridian cells
+
+export class GlazeField {
+  constructor() {
+    this.data = new Float32Array(GW * GH * 4);   // t0,t1,t2,wax
+    this.tex = new THREE.DataTexture(this.data, GW, GH, THREE.RGBAFormat, THREE.FloatType);
+    this.tex.wrapS = THREE.RepeatWrapping;
+    this.tex.wrapT = THREE.ClampToEdgeWrapping;
+    this.tex.minFilter = THREE.LinearFilter;
+    this.tex.magFilter = THREE.LinearFilter;
+    this.tex.generateMipmaps = false;
+    this.tex.needsUpdate = true;
+
+    // meridian lookup, rebuilt whenever the body changes
+    this.mY = new Float32Array(GH);      // height above the wheel head
+    this.mR = new Float32Array(GH);      // radius
+    this.mDown = new Float32Array(GH);   // downhill gravity component (0..1)
+    this.mSide = new Float32Array(GH);   // 0 outer, 1 rim, 2 inner, 3 base
+    this.mCirc = new Float32Array(GH);   // circumference, for volume conservation
+
+    this._scratch = new Float32Array(GW * GH * 4);
+    this.slotIds = [null, null, null];
+    this.runHistory = 0;
+    this.dirty = true;
+  }
+
+  clear() {
+    this.data.fill(0);
+    this.runHistory = 0;
+    this.tex.needsUpdate = true;
+  }
+
+  /** Rebuild the meridian lookup table from a ProfileBuffer. */
+  bindProfile(pb) {
+    const K = pb.count;
+    const pr = pb.pr, py = pb.py;
+    // arc-length parameterise
+    const arc = new Float32Array(K);
+    let tot = 0;
+    for (let k = 1; k < K; k++) {
+      tot += Math.hypot(pr[k] - pr[k - 1], py[k] - py[k - 1]);
+      arc[k] = tot;
+    }
+    const inv = tot > 1e-5 ? 1 / tot : 1;
+
+    let k = 0;
+    for (let j = 0; j < GH; j++) {
+      const t = j / (GH - 1);
+      const target = t * tot;
+      while (k < K - 2 && arc[k + 1] < target) k++;
+      const seg = Math.max(1e-6, arc[k + 1] - arc[k]);
+      const f = clamp01((target - arc[k]) / seg);
+      const r = lerp(pr[k], pr[k + 1], f);
+      const y = lerp(py[k], py[k + 1], f);
+      this.mR[j] = r;
+      this.mY[j] = y;
+      this.mCirc[j] = Math.max(0.05, TAU * r);
+      // downhill component: how much of the surface tangent points down
+      const dx = pr[k + 1] - pr[k], dy = py[k + 1] - py[k];
+      const l = Math.hypot(dx, dy) || 1;
+      this.mDown[j] = clamp01(Math.abs(dy / l));
+      // which surface are we on
+      const kk = k / K;
+      this.mSide[j] = kk < 0.012 ? 3 : kk < 0.5 ? 0 : kk < 0.53 ? 1 : 2;
+    }
+    this.arcTotal = tot;
+    this.topY = Math.max(...this.mY);
+  }
+
+  idx(i, j) { return (j * GW + i) * 4; }
+
+  /* ---------------- application ---------------- */
+
+  /** Brush / sponge a patch of glaze. angle 0..1, arcT 0..1. */
+  brush(angle, arcT, radius, slot, amount, wax = false) {
+    const ci = angle * GW, cj = arcT * (GH - 1);
+    const ri = Math.ceil(radius * GW) + 1;
+    const rj = Math.ceil(radius * GH) + 1;
+    for (let dj = -rj; dj <= rj; dj++) {
+      const j = Math.round(cj + dj);
+      if (j < 0 || j >= GH) continue;
+      for (let di = -ri; di <= ri; di++) {
+        let i = Math.round(ci + di);
+        i = ((i % GW) + GW) % GW;
+        const du = di / GW, dv = dj / GH;
+        const d = Math.hypot(du, dv) / Math.max(1e-5, radius);
+        if (d > 1) continue;
+        const w = Math.pow(1 - d * d, 1.6);
+        const o = this.idx(i, j);
+        if (wax) {
+          this.data[o + 3] = Math.min(1, this.data[o + 3] + w * amount);
+        } else {
+          const resist = 1 - this.data[o + 3];
+          this.data[o + slot] = clamp(this.data[o + slot] + w * amount * resist, 0, 0.62);
+        }
+      }
+    }
+    this.dirty = true;
+  }
+
+  /**
+   * DIP — invert the pot and lower it into the bucket to a depth.
+   * Everything below `depthY` (measured from the rim downward) gets
+   * an even coat, with a heavier bead where it came out of the glaze.
+   */
+  dip(depthFrac, slot, thickness) {
+    const top = this.topY;
+    const cut = top * (1 - clamp01(depthFrac));
+    for (let j = 0; j < GH; j++) {
+      const y = this.mY[j];
+      if (y < cut) continue;
+      // a dipped surface is thicker where it drained, i.e. lower down
+      const drain = smoothstep(top, cut, y);
+      const edge = 1 + 0.55 * Math.exp(-(((y - cut) / (top * 0.06)) ** 2));
+      const amt = thickness * (0.82 + 0.34 * drain) * edge;
+      for (let i = 0; i < GW; i++) {
+        const o = this.idx(i, j);
+        const resist = 1 - this.data[o + 3];
+        // slight unevenness — no dip is perfectly even
+        const n = 0.94 + 0.12 * Math.sin(i * 0.31 + j * 0.11) * Math.sin(i * 0.07 - j * 0.23);
+        this.data[o + slot] = clamp(this.data[o + slot] + amt * n * resist, 0, 0.7);
+      }
+    }
+    this.dirty = true;
+  }
+
+  /** POUR — a ribbon of glaze down one side, with real runs. */
+  pour(angle, widthFrac, slot, thickness, fromArc = 0.5) {
+    const ci = angle * GW;
+    const halfW = Math.max(1, widthFrac * GW * 0.5);
+    for (let j = 0; j < GH; j++) {
+      const t = j / (GH - 1);
+      if (t > fromArc) continue;
+      const falloff = smoothstep(fromArc, fromArc - 0.55, t);
+      for (let d = -Math.ceil(halfW * 1.6); d <= Math.ceil(halfW * 1.6); d++) {
+        let i = Math.round(ci + d);
+        i = ((i % GW) + GW) % GW;
+        const w = Math.exp(-((d / halfW) ** 2) * 1.4);
+        if (w < 0.02) continue;
+        const o = this.idx(i, j);
+        const resist = 1 - this.data[o + 3];
+        const wobble = 1 + 0.25 * Math.sin(j * 0.19 + d * 0.9);
+        this.data[o + slot] = clamp(
+          this.data[o + slot] + thickness * w * (0.45 + 0.75 * falloff) * wobble * resist, 0, 0.75
+        );
+      }
+    }
+    this.dirty = true;
+  }
+
+  /** SPRAY — even mist over the visible hemisphere. */
+  spray(angle, slot, thickness, spread = 0.34) {
+    for (let j = 0; j < GH; j++) {
+      if (this.mSide[j] > 1.5) continue;   // spray does not reach inside
+      for (let i = 0; i < GW; i++) {
+        let d = Math.abs(((i / GW - angle + 1.5) % 1) - 0.5);
+        const w = Math.exp(-((d / spread) ** 2) * 2.2);
+        if (w < 0.015) continue;
+        const o = this.idx(i, j);
+        const resist = 1 - this.data[o + 3];
+        this.data[o + slot] = clamp(this.data[o + slot] + thickness * w * resist, 0, 0.5);
+      }
+    }
+    this.dirty = true;
+  }
+
+  /** Wipe the foot — mandatory, or the pot welds to the shelf. */
+  wipeFoot(heightCm = 0.7) {
+    for (let j = 0; j < GH; j++) {
+      if (this.mSide[j] > 1.5) continue;
+      if (this.mY[j] > heightCm) continue;
+      const f = smoothstep(heightCm, heightCm * 0.35, this.mY[j]);
+      for (let i = 0; i < GW; i++) {
+        const o = this.idx(i, j);
+        for (let s = 0; s < SLOTS; s++) this.data[o + s] *= 1 - f;
+      }
+    }
+    this.dirty = true;
+  }
+
+  /** Is the foot clean enough to sit on a shelf? 1 = clean. */
+  footClean(heightCm = 0.55) {
+    let worst = 0;
+    for (let j = 0; j < GH; j++) {
+      if (this.mSide[j] > 1.5 || this.mY[j] > heightCm) continue;
+      for (let i = 0; i < GW; i += 4) {
+        const o = this.idx(i, j);
+        const t = this.data[o] + this.data[o + 1] + this.data[o + 2];
+        if (t > worst) worst = t;
+      }
+    }
+    return clamp01(1 - worst / 0.16);
+  }
+
+  /* ---------------- statistics ---------------- */
+
+  stats() {
+    const sum = [0, 0, 0], cov = [0, 0, 0];
+    let cells = 0, anyCov = 0, evenAcc = 0;
+    const outer = [];
+    for (let j = 0; j < GH; j++) {
+      if (this.mSide[j] === 3) continue;
+      for (let i = 0; i < GW; i += 2) {
+        const o = this.idx(i, j);
+        let tot = 0;
+        for (let s = 0; s < SLOTS; s++) {
+          const v = this.data[o + s];
+          sum[s] += v;
+          if (v > 0.012) cov[s]++;
+          tot += v;
+        }
+        if (tot > 0.012) anyCov++;
+        if (this.mSide[j] < 1.5) outer.push(tot);
+        cells++;
+      }
+    }
+    const n = Math.max(1, cells);
+    // evenness of the outer coat
+    if (outer.length) {
+      const mean = outer.reduce((a, b) => a + b, 0) / outer.length;
+      let v = 0;
+      for (const o of outer) v += (o - mean) ** 2;
+      evenAcc = clamp01(1 - Math.sqrt(v / outer.length) / Math.max(0.03, mean * 0.9));
+    }
+    return {
+      meanThick: sum.map((s, i) => (cov[i] > 0 ? s / cov[i] : 0)),
+      coverage: cov.map((c) => c / n),
+      totalCoverage: anyCov / n,
+      evenness: evenAcc,
+      footClean: this.footClean(),
+    };
+  }
+
+  /* ---------------- flow during the firing ---------------- */
+
+  /**
+   * One step of molten flow. dtHours is kiln time, T is Celsius.
+   * Returns how much total movement happened (drives the "it's running"
+   * warning in the HUD).
+   */
+  flow(dtHours, T, glazes) {
+    const eta = [];
+    const mob = [];
+    let anyMolten = false;
+    for (let s = 0; s < SLOTS; s++) {
+      const g = glazes[s];
+      if (!g) { eta.push(1e9); mob.push(0); continue; }
+      const mp = meltPoint(g);
+      const molten = smoothstep(mp - 20, mp + 70, T);
+      const e = Math.max(0.02, viscosity(g, T));
+      eta.push(e);
+      mob.push((molten * (g.runaway ? 2.6 : 1)) / e);
+      if (molten > 0.02) anyMolten = true;
+    }
+    if (!anyMolten) return 0;
+
+    const d = this.data, tmp = this._scratch;
+    tmp.set(d);
+    let moved = 0;
+    const kFlow = dtHours * 0.9;
+
+    for (let j = 1; j < GH; j++) {
+      const side = this.mSide[j];
+      // on the inner surface "down" points the other way along the arc
+      const inner = side > 1.5;
+      const jTo = inner ? j + 1 : j - 1;
+      if (jTo < 0 || jTo >= GH) continue;
+      const down = this.mDown[j];
+      if (down < 0.02) continue;
+      const circHere = this.mCirc[j], circTo = Math.max(0.05, this.mCirc[jTo]);
+      const ratio = circHere / circTo;
+
+      for (let i = 0; i < GW; i++) {
+        const o = this.idx(i, j), o2 = this.idx(i, jTo);
+        for (let s = 0; s < SLOTS; s++) {
+          const h = d[o + s];
+          if (h < 0.004 || mob[s] <= 0) continue;
+          // Poiseuille: flux goes as h^3
+          let q = kFlow * mob[s] * down * h * h * h * 42;
+          q = Math.min(q, h * 0.42);
+          if (q < 1e-6) continue;
+          tmp[o + s] -= q;
+          tmp[o2 + s] += q * ratio;
+          moved += q;
+        }
+      }
+    }
+
+    // surface tension: a molten glaze evens itself out sideways
+    const smooth = clamp01(dtHours * 0.5);
+    if (smooth > 0.001) {
+      for (let j = 0; j < GH; j++) {
+        for (let i = 0; i < GW; i++) {
+          const o = this.idx(i, j);
+          const oL = this.idx((i + GW - 1) % GW, j);
+          const oR = this.idx((i + 1) % GW, j);
+          for (let s = 0; s < SLOTS; s++) {
+            if (mob[s] <= 0) continue;
+            const avg = (tmp[oL + s] + tmp[oR + s]) * 0.5;
+            tmp[o + s] = lerp(tmp[o + s], avg, smooth * 0.35);
+          }
+        }
+      }
+    }
+
+    d.set(tmp);
+    this.runHistory += moved;
+    this.tex.needsUpdate = true;
+    return moved;
+  }
+
+  /** How far the glaze crept toward the foot. */
+  footRisk() {
+    let worst = 0;
+    for (let j = 0; j < GH; j++) {
+      if (this.mSide[j] > 1.5) continue;
+      if (this.mY[j] > 0.32) continue;
+      for (let i = 0; i < GW; i += 3) {
+        const o = this.idx(i, j);
+        const t = this.data[o] + this.data[o + 1] + this.data[o + 2];
+        if (t > worst) worst = t;
+      }
+    }
+    return worst;
+  }
+
+  upload() {
+    if (this.dirty) { this.tex.needsUpdate = true; this.dirty = false; }
+  }
+
+  /**
+   * Quantise to bytes at a reduced resolution so a whole gallery fits
+   * in localStorage. 64x48 is more than enough for a thumbnail and for
+   * standing the piece back on a shelf.
+   */
+  snapshot(sw = 64, sh = 48) {
+    const out = new Uint8Array(sw * sh * 4);
+    for (let j = 0; j < sh; j++) {
+      const sj = Math.min(GH - 1, Math.round((j / (sh - 1)) * (GH - 1)));
+      for (let i = 0; i < sw; i++) {
+        const si = Math.min(GW - 1, Math.round((i / sw) * GW));
+        const o = (sj * GW + si) * 4, q = (j * sw + i) * 4;
+        for (let c = 0; c < 4; c++) out[q + c] = Math.round(clamp01(this.data[o + c] / 0.7) * 255);
+      }
+    }
+    let s = '';
+    const CH = 4096;
+    for (let i = 0; i < out.length; i += CH) s += String.fromCharCode.apply(null, out.subarray(i, i + CH));
+    return { w: sw, h: sh, d: btoa(s) };
+  }
+
+  restore(snap) {
+    try {
+      if (!snap || !snap.d) return false;
+      const bin = atob(snap.d);
+      const sw = snap.w || 64, sh = snap.h || 48;
+      for (let j = 0; j < GH; j++) {
+        const sj = Math.min(sh - 1, Math.round((j / (GH - 1)) * (sh - 1)));
+        for (let i = 0; i < GW; i++) {
+          const si = Math.min(sw - 1, Math.round((i / GW) * sw));
+          const q = (sj * sw + si) * 4, o = (j * GW + i) * 4;
+          for (let c = 0; c < 4; c++) {
+            this.data[o + c] = (bin.charCodeAt(q + c) / 255) * 0.7;
+          }
+        }
+      }
+      this.tex.needsUpdate = true;
+      return true;
+    } catch (e) { return false; }
+  }
+
+  dispose() { this.tex.dispose(); }
+}
+
+/* ------------------------------------------------------------------ */
+/*  CPU ray / lathe intersection                                       */
+/*  The mesh is built on the GPU, so three's raycaster cannot see it.  */
+/*  We march the ray and test against the meridian polygon instead.    */
+/* ------------------------------------------------------------------ */
+
+export function raycastPot(origin, dir, pb, maxDist = 300) {
+  const K = pb.count;
+  const pr = pb.pr, py = pb.py;
+  let lo = 0, hi = maxDist;
+
+  // bounding cylinder cull
+  let rmax = 0, ymax = 0;
+  for (let k = 0; k < K; k++) { if (pr[k] > rmax) rmax = pr[k]; if (py[k] > ymax) ymax = py[k]; }
+  rmax += 0.4; ymax += 0.4;
+
+  const inside = (r, y) => {
+    // even-odd test of (r,y) against the closed meridian polygon
+    let c = false;
+    for (let a = 0, b = K - 1; a < K; b = a++) {
+      const ya = py[a], yb = py[b];
+      if ((ya > y) !== (yb > y)) {
+        const x = pr[a] + ((y - ya) / (yb - ya)) * (pr[b] - pr[a]);
+        if (r < x) c = !c;
+      }
+    }
+    return c;
+  };
+
+  const N = 320;
+  let prevIn = false, prevT = 0;
+  for (let s = 0; s <= N; s++) {
+    const t = lo + (hi - lo) * (s / N);
+    const x = origin.x + dir.x * t, y = origin.y + dir.y * t, z = origin.z + dir.z * t;
+    if (y < -1 || y > ymax) { prevIn = false; prevT = t; continue; }
+    const r = Math.hypot(x, z);
+    if (r > rmax) { prevIn = false; prevT = t; continue; }
+    const ins = inside(r, y);
+    if (ins && !prevIn && s > 0) {
+      // bisect for a clean surface point
+      let a = prevT, b = t;
+      for (let it = 0; it < 22; it++) {
+        const m = (a + b) * 0.5;
+        const px = origin.x + dir.x * m, pyy = origin.y + dir.y * m, pz = origin.z + dir.z * m;
+        if (inside(Math.hypot(px, pz), pyy)) b = m; else a = m;
+      }
+      const hx = origin.x + dir.x * b, hy = origin.y + dir.y * b, hz = origin.z + dir.z * b;
+      const hr = Math.hypot(hx, hz);
+      // nearest meridian station
+      let best = 0, bd = 1e9;
+      for (let k = 0; k < K; k++) {
+        const dd = (pr[k] - hr) ** 2 + (py[k] - hy) ** 2;
+        if (dd < bd) { bd = dd; best = k; }
+      }
+      // arc parameter of the hit station (no allocation: this runs per frame)
+      let tot = 0, upto = 0;
+      for (let k = 1; k < K; k++) {
+        tot += Math.hypot(pr[k] - pr[k - 1], py[k] - py[k - 1]);
+        if (k === best) upto = tot;
+      }
+      const arc = tot > 0 ? upto / tot : 0;
+      let ang = Math.atan2(hz, hx) / TAU;
+      if (ang < 0) ang += 1;
+      return { hit: true, x: hx, y: hy, z: hz, dist: b, angle: ang, arcT: arc, k: best, r: hr };
+    }
+    prevIn = ins; prevT = t;
+  }
+  return { hit: false };
+}
