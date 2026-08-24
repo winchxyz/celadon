@@ -27,6 +27,14 @@ const ST = {
 
 const MAX_RPM = 190;
 
+/* ---- the banding wheel in the glaze room -------------------------- */
+/** How far the pot turns per pixel of a right-drag: a full turn ≈ 900 px. */
+const BAND_RAD_PER_PX = 0.007;
+/** Ceiling on a thrown spin, in radians per second — about half a turn. */
+const BAND_MAX = 3.2;
+/** One notch of the scroll wheel, for placing a brush exactly. */
+const BAND_NOTCH = Math.PI / 30;   // 6 degrees
+
 export class Game {
   constructor(engine, studio, hud, audio) {
     this.eng = engine;
@@ -173,7 +181,25 @@ export class Game {
         // a fresh side. Sideways turns the wheel; up and down still
         // tilts the view, so you can look into the mouth.
         if (this.state === ST.GLAZE) {
-          this._band = (this._band ?? 0) - (e.movementX ?? 0) * 0.008;
+          // The pot follows the mouse one to one, and a flick at the end
+          // lets it coast — which is what a banding wheel does.
+          //
+          // It used to ACCUMULATE velocity: every pointermove added to
+          // `_band`, and `_band` was then added to the rotation once per
+          // frame with no dt. A brisk 400 px drag arrives as forty
+          // events inside one or two frames, so it built 3.2 rad *per
+          // frame* — about eleven thousand degrees a second — and then
+          // coasted through nine more turns. You could not put a brush
+          // anywhere near it.
+          const dx = e.movementX ?? 0;
+          this.pot.rotation.y -= dx * BAND_RAD_PER_PX;
+          // remember the last moments of the gesture, so the throw at
+          // the end is the speed of the throw and not of the whole drag
+          const now = performance.now();
+          const gap = Math.max(1, now - (this._bandT ?? now));
+          this._bandT = now;
+          const v = -dx * BAND_RAD_PER_PX / (gap / 1000);
+          this._bandV = clamp((this._bandV ?? 0) * 0.6 + v * 0.4, -BAND_MAX, BAND_MAX);
           this.eng.rig.orbit(0, e.movementY ?? 0);
         } else {
           this.eng.rig.orbit(e.movementX ?? 0, e.movementY ?? 0);
@@ -184,14 +210,30 @@ export class Game {
     c.addEventListener('pointerdown', (e) => {
       set(e);
       this.audio.resume();
-      c.setPointerCapture?.(e.pointerId);
+      // Capturing the pointer is a nicety — it keeps a drag alive when the
+      // cursor leaves the canvas — and it must never be able to take the
+      // input with it. `?.` guards against the method being absent, not
+      // against it THROWING, and it throws readily: NotFoundError when the
+      // pointer is no longer active. That exception unwound the rest of
+      // this handler, so the button press was never recorded and the
+      // control simply did nothing.
+      try { c.setPointerCapture?.(e.pointerId); } catch { /* not fatal */ }
       if (e.button === 2 || e.button === 1) { this.pointer.right = true; return; }
       this.pointer.down = true;
       this._onPress();
     });
 
     const up = (e) => {
-      if (e && (e.button === 2 || e.button === 1)) { this.pointer.right = false; return; }
+      if (e && (e.button === 2 || e.button === 1)) {
+        this.pointer.right = false;
+        // let go mid-flick and the wheel carries on; let go having come
+        // to rest and it stays where you put it
+        if (this.state === ST.GLAZE) {
+          this._band = Math.abs(this._bandV ?? 0) > 0.35 ? this._bandV : 0;
+          this._bandV = 0; this._bandT = 0;
+        }
+        return;
+      }
       this.pointer.down = false;
       this._onRelease();
     };
@@ -204,6 +246,13 @@ export class Game {
       e.preventDefault();
       if (e.shiftKey || this.state === ST.KILN || this.state === ST.REVEAL || this.state === ST.TITLE) {
         this.eng.rig.zoom(e.deltaY);
+      } else if (this.state === ST.GLAZE) {
+        // There is no wheel to speed up in the glaze room, so scrolling
+        // used to do nothing at all here. It is the natural place for
+        // the slow, exact turn you want when lining a brush up on a
+        // spot: one notch, six degrees, no momentum.
+        this._band = 0;
+        this.pot.rotation.y -= Math.sign(e.deltaY) * BAND_NOTCH;
       } else {
         this.setWheelSpeed(this.omegaTarget - Math.sign(e.deltaY) * 1.15);
       }
@@ -867,8 +916,9 @@ export class Game {
     this.hud.hideContext();
     this.hud.setAdvance('Let it set up', true);
     this.hud.setKeyHints([
-      ['DRAG', 'shape the pot'], ['RMB', 'orbit'], ['CTRL+Z', 'take it back'],
-      ['1-4', 'tools'], ['SPACE', 'water'], ['W/S', 'wheel'],
+      ['DRAG', 'shape it'], ['RMB', 'orbit'], ['SCROLL', 'wheel speed'],
+      ['SHIFT+SCROLL', 'zoom'], ['CTRL+Z', 'take it back'],
+      ['1-4', 'tools'], ['SPACE', 'water'], ['TAB', 'stress'],
     ]);
     this.hud.toast('Hold the left button on the clay and move it. <b>Up</b> makes it taller, <b>down</b> presses it back down, <b>out</b> makes it wider, <b>in</b> makes it narrower.', '', 8500);
     this.save.stats.thrown++;
@@ -1386,6 +1436,12 @@ export class Game {
     this.mat.userData.u.uWet.value = 0.25;
     this.hud.setToolset('trim', 'trim');
     this.hud.setStage('LEATHER-HARD', 'A day under cloth. Now turn the foot: cut away the surplus and leave a clean ring to stand on.');
+    // Trimming used to inherit the throwing hints, which advertise water
+    // and a wheel-speed control that do nothing to leather-hard clay.
+    this.hud.setKeyHints([
+      ['DRAG', 'cut the foot'], ['RMB', 'orbit'], ['SHIFT+SCROLL', 'zoom'],
+      ['CTRL+Z', 'take it back'], ['ENTER', 'bisque fire'],
+    ]);
     this.hud.setAdvance('Bisque fire');
     this.hud.toast('Dried to leather-hard. It shrank about five parts in a hundred.', '', 5200);
     this.audio.ring(1.4, false);
@@ -1393,6 +1449,8 @@ export class Game {
 
   startGlaze() {
     this._clearCoach();
+    // a wheel left spinning should not still be spinning next time
+    this._band = 0; this._bandV = 0; this._bandT = 0;
     const c = this.clay;
     c.toBisque();
     this.pb.update(c);
@@ -1425,7 +1483,10 @@ export class Game {
     this._updateGlazeCoach();
     this.hud.setStage('THE GLAZE ROOM', 'Bisque-fired: hard, porous, and thirsty. Whatever you put on now is what the fire gets to work with.');
     this.hud.setAdvance('To the kiln');
-    this.hud.setKeyHints([['LMB', 'apply'], ['RMB drag', 'turn the pot'], ['1-6', 'tools'], ['ENTER', 'kiln']]);
+    this.hud.setKeyHints([
+      ['LMB', 'apply'], ['RMB drag', 'turn the pot'], ['SCROLL', 'turn it a nudge'],
+      ['SHIFT+SCROLL', 'zoom'], ['1-6', 'tools'], ['ENTER', 'to the kiln'],
+    ]);
     this.hud.glazePanel(
       { glazes: this.free ? this._freeGlazes() : this.save.glazes, slot: this.slots[0]?.id, thickness: this.glazeThickness },
       (id) => this._pickGlaze(id),
@@ -1518,11 +1579,12 @@ export class Game {
   }
 
   _updateGlaze(dt) {
-    // the banding wheel keeps turning after you let go of it
+    // The banding wheel keeps turning after you let go of it. `_band` is
+    // radians per SECOND, so this behaves the same at 30 fps and at 144.
     if (this._band) {
-      this.pot.rotation.y += this._band;
-      this._band *= Math.exp(-3.4 * dt);
-      if (Math.abs(this._band) < 1e-4) this._band = 0;
+      this.pot.rotation.y += this._band * dt;
+      this._band *= Math.exp(-2.2 * dt);
+      if (Math.abs(this._band) < 0.02) this._band = 0;
     }
     this._updateToolPoint();
     // reading the whole field is not free; four times a second is plenty
@@ -1627,7 +1689,9 @@ export class Game {
     this.hud.setToolset('none');
     this.hud.setStage('THE KILN', 'Everything you do from here is a bet. Set the schedule and light it.');
     this.hud.setAdvance('Light the kiln');
-    this.hud.setKeyHints([['DRAG', 'sliders'], ['RMB', 'orbit'], ['ENTER', 'light it']]);
+    this.hud.setKeyHints([
+      ['DRAG', 'sliders'], ['RMB', 'orbit'], ['SCROLL', 'zoom'], ['ENTER', 'light it'],
+    ]);
     this.hud.kilnPanel(this.schedule, () => this.hud.updateKilnPanel(this.schedule, this.save.coin), null);
 
     // carry the pot to the kiln

@@ -21,7 +21,7 @@
 
 <p>
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-3F9C81?style=flat-square"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-15%20passing-3F9C81?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-16%20passing-3F9C81?style=flat-square">
   <img alt="Art assets" src="https://img.shields.io/badge/art%20assets-0-3F9C81?style=flat-square">
   <img alt="Dependencies" src="https://img.shields.io/badge/runtime%20deps-1-3F9C81?style=flat-square">
   <img alt="Sound" src="https://img.shields.io/badge/sound-CC0-3F9C81?style=flat-square">
@@ -66,7 +66,7 @@ nine small CC0 sound recordings — about 140 kB — and it runs without them.
 
 It is already running at **[winchxyz.github.io/celadon](https://winchxyz.github.io/celadon/)** —
 no install, nothing to download. Every push to `master` rebuilds it, and the
-fifteen benches have to pass before it deploys.
+sixteen benches have to pass before it deploys.
 
 To run it locally:
 
@@ -77,7 +77,7 @@ npm run dev      # http://localhost:5180
 
 ```bash
 npm run build && npm run preview   # production bundle
-npm test                           # fifteen headless benches, ~5 s
+npm test                           # sixteen headless benches, ~5 s
 ```
 
 **Requirements:** a browser with WebGL2 and hardware acceleration — recent
@@ -126,10 +126,11 @@ next.
 
 | | |
 |---|---|
+| **Right-drag** | orbit — except in the glaze room, where it turns the pot on its banding wheel |
+| **Scroll** | wheel speed at the wheel · a six-degree nudge in the glaze room · zoom with **Shift** |
 | **Ctrl+Z** | take back the last few seconds — use it freely |
 | **1 – 4** | hands · rib · water · needle |
 | **Space** | water · **W** / **S** wheel speed |
-| **Right-drag** | orbit · **Shift+scroll** zoom |
 | **Tab** | stress view · **G** target ghost |
 | **Enter** | next stage · **Esc** menu |
 
@@ -338,7 +339,7 @@ Most of what makes this game hard to get right is in the simulation, not the
 renderer, so nearly all of it can be tested headlessly.
 
 ```bash
-npm test          # all fifteen, about five seconds
+npm test          # all sixteen, about five seconds
 ```
 
 They fall into four groups.
@@ -365,6 +366,7 @@ simulation bench can pass while the game itself misbehaves. For a while one did.
 | `bigger` | five different grips, deep in the bore to out in mid-air; every one must both widen and narrow |
 | `crease` | a wall that has been creased can still be recovered |
 | `camsweep` | the camera can see the whole pot from every angle it is allowed to reach |
+| `controls` | how far the pot turns for a given hand movement, that it is the same at 30 fps and 144, and that a flick cannot run away |
 
 **Is it put together properly?**
 

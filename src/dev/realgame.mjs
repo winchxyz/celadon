@@ -59,6 +59,16 @@ const rig = {
   minPhi: CAMERA.minPhi, maxPhi: CAMERA.maxPhi,
   autoSpin: 0, cam: camera,
   frame(t, r, p, th) { this.goalTarget.copy(t); this.goalRadius = r; if (p != null) this.goalPhi = p; if (th != null) this.goalTheta = th; },
+  // The real rig's two mouse verbs, with the real scale factors from
+  // core/engine.js, so a bench that drags the right button moves the
+  // camera by the same amount the game does.
+  orbit(dx, dy) {
+    this.goalTheta -= dx * 0.0055;
+    this.goalPhi = Math.min(1.78, Math.max(0.70, this.goalPhi - dy * 0.0045));
+  },
+  zoom(dz) {
+    this.goalRadius = Math.min(150, Math.max(16, this.goalRadius * (1 + dz * 0.0014)));
+  },
   kick() {},
   update() {
     this.target.copy(this.goalTarget); this.radius = this.goalRadius;
@@ -75,7 +85,28 @@ const rig = {
 };
 const eng = {
   camera, rig, scene: { add() {}, remove() {} },
-  canvas: { addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }), setPointerCapture() {} },
+  // A canvas that actually remembers its listeners, so a bench can drive
+  // the game's own pointer and wheel handlers rather than reaching past
+  // them and calling internals. Throwing the listeners away meant the
+  // whole input layer — where the mouse becomes a place on the pot —
+  // was the one part of the game no test could touch.
+  canvas: {
+    _on: new Map(),
+    addEventListener(type, fn) {
+      if (!this._on.has(type)) this._on.set(type, []);
+      this._on.get(type).push(fn);
+    },
+    removeEventListener(type, fn) {
+      const l = this._on.get(type);
+      if (l) this._on.set(type, l.filter((f) => f !== fn));
+    },
+    dispatchEvent(e) {
+      for (const fn of this._on.get(e.type) ?? []) fn(e);
+      return true;
+    },
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }),
+    setPointerCapture() {},
+  },
   grade: { uniforms: { uHaze: { value: 0 } } },
   bloom: { strength: 0.5 }, renderer: { toneMappingExposure: 1 },
 };
