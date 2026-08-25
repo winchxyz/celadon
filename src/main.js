@@ -189,9 +189,15 @@ function pickQuality() {
      kind of pressure does not slow down, it drops the WebGL context —
      and a dropped context is a black frame, appearing at no particular
      moment, which is exactly what was reported. */
-  const touch = (navigator.maxTouchPoints ?? 0) > 1
-    || matchMedia('(pointer:coarse)').matches;
-  if (touch) return 'medium';
+  /* `pointer: coarse` and not `any-pointer: fine` is the precise
+     question: is a finger the ONLY thing steering this. A laptop with a
+     touchscreen answers no — its primary pointer is the trackpad — and
+     keeps the high chain it can afford. An iPad answers yes. Counting
+     maxTouchPoints instead would have quietly demoted every touchscreen
+     laptop in the world. */
+  const touchOnly = matchMedia('(pointer:coarse)').matches
+    && !matchMedia('(any-pointer:fine)').matches;
+  if (touchOnly) return 'medium';
 
   if (mem <= 4 || cores <= 4 || small) return 'medium';
   return 'high';
