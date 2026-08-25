@@ -333,10 +333,36 @@ export class Engine {
     this.scene.environmentIntensity = 1.0;
 
     this._buildComposer();
+    // The chain was just built at exactly this size, so record it: without
+    // a baseline the first resize event of the session rebuilds it again
+    // for nothing, and on iOS that event arrives as soon as the toolbar
+    // moves.
+    this._sizedW = Math.max(1, window.innerWidth || 1);
+    this._sizedH = Math.max(1, window.innerHeight || 1);
+    this._sizedDpr = renderer.getPixelRatio();
 
     this.clock = new THREE.Clock();
     this._onResize = () => this.resize();
     window.addEventListener('resize', this._onResize);
+
+    /* A lost context is not a crash, and it should not look like one.
+       When a tablet runs short of GPU memory it takes the context away
+       rather than swapping, and the canvas goes black until the browser
+       hands it back. Left to itself the page keeps calling render() into
+       nothing, which is how a black frame becomes a black frame every
+       few seconds. Say so, stop drawing, and pick up where we left off. */
+    this._lost = false;
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();          // without this the context never returns
+      this._lost = true;
+      console.warn('celadon: the graphics context was taken away; waiting for it back');
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+      this._lost = false;
+      this._sizedW = this._sizedH = this._sizedDpr = -1;   // force a real resize
+      this.resize();
+      console.info('celadon: graphics context restored');
+    });
   }
 
   _buildComposer() {
@@ -399,6 +425,18 @@ export class Engine {
     // renders but cannot be touched.
     const w = Math.max(1, window.innerWidth || 1);
     const h = Math.max(1, window.innerHeight || 1);
+
+    /* Do nothing if nothing changed.
+       iOS fires resize for things that are not a resize: the toolbar
+       sliding away, the keyboard, and Safari's own pinch zoom, which
+       cannot be switched off and which the game's two-finger zoom
+       triggers as a side effect. Every one of those used to tear down
+       and rebuild the whole composer chain — several full-screen render
+       targets — for a window that was the same size as before. */
+    const dpr = this.renderer.getPixelRatio();
+    if (w === this._sizedW && h === this._sizedH && dpr === this._sizedDpr) return;
+    this._sizedW = w; this._sizedH = h; this._sizedDpr = dpr;
+
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
@@ -408,6 +446,7 @@ export class Engine {
   }
 
   render(dt) {
+    if (this._lost) return;   // there is nothing to draw into
     this.grade.uniforms.uTime.value += dt;
     this.composer.render(dt);
   }

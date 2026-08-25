@@ -11,6 +11,16 @@
    ============================================================ */
 
 :root{
+  /* Measured at runtime by Hud._measure and used by everything that
+     stacks up from the bottom of the screen. These are only the values
+     that hold before the first measurement — a sensible desktop bar and
+     belt, so nothing jumps on the first frame. */
+  --bar-h:64px;
+  --belt-h:78px;
+  --top-h:150px;
+  --gauge-b:0px;
+  --side-w:0px;
+
   /* Cream plates, cocoa ink. The panels cover more of the screen than
      the pot does and they were a blue-black glass cockpit, which is the
      single loudest thing arguing against a warm room behind them. */
@@ -97,21 +107,6 @@ html,body{
 #app{position:fixed;inset:0;overflow:hidden}
 #gl{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none}
 
-/* Touch targets. A tool button at 48px square is fine under a mouse and
-   too small under a thumb; the guideline everyone converged on is 44px,
-   and a range slider's thumb is the worst offender at 18. */
-@media (pointer:coarse){
-  .tool{width:60px;height:66px}
-  .menu button{padding:1.2em 1.25em}
-  .btn{padding:1.15em 1.7em}
-  input[type=range]{height:34px}
-  input[type=range]::-webkit-slider-thumb{width:26px;height:26px}
-  input[type=range]::-moz-range-thumb{width:26px;height:26px}
-  .glaze{padding:.8em .6em}
-  .seg button{padding:1em .2em}
-  #context{width:min(340px,42vw)}
-  #context.kiln{width:min(400px,46vw)}
-}
 #hud{position:relative;z-index:2}
 
 /* ============================================================
@@ -205,9 +200,17 @@ html,body{
 .led-v{font:700 16px/1 var(--display);font-variant-numeric:tabular-nums;color:var(--celadon-deep);letter-spacing:.02em}
 
 /* ---------------- commission ---------------- */
+/* Under the header, wherever the header ends. Pinned at 19vh it was
+   fine until a tool description added a line to #hud-top, and then on a
+   wide short window the header simply grew down through the card:
+   measured 300x10px of overlap at 1600x720, with three pixels to spare
+   at 1366x768. */
 #commission{
-  left:calc(var(--pad)*1.4);top:19vh;width:min(300px,26vw);
-  max-height:calc(81vh - 104px);overflow:auto;
+  left:calc(var(--pad)*1.4);
+  top:calc(var(--top-h) + var(--pad)*0.6);
+  width:min(300px,26vw);
+  max-height:calc(100vh - var(--top-h) - var(--bar-h) - var(--belt-h) - var(--pad)*3);
+  overflow:auto;
 }
 #commission::-webkit-scrollbar{width:4px}
 #commission::-webkit-scrollbar-thumb{background:#4A352424;border-radius:3px}
@@ -229,9 +232,18 @@ html,body{
 #com-reqs li b{color:var(--ink);font-weight:600}
 
 /* ---------------- gauges ---------------- */
-#gauges{right:calc(var(--pad)*1.4);top:22vh;width:min(266px,24vw)}
-.gauge{display:grid;grid-template-columns:1fr 108px 46px;align-items:center;gap:.7em;margin-bottom:.7em}
-.gauge label{font:700 11px/1 var(--display);letter-spacing:.10em;color:var(--ink-dim)}
+#gauges{right:calc(var(--pad)*1.4);top:calc(var(--top-h) + var(--pad)*0.6);width:min(266px,24vw)}
+/* The tracks were fixed at 108 and 46 with a 1fr label whose min-content
+   floor is the word THINNEST — about 248px of grid in a panel that is
+   190px wide below 900px. It did not wrap or clip: an overflowing grid
+   just draws outside its box, so on an upright iPad all five readouts
+   were painted past the edge of the slab and off the side of the screen.
+   Both tracks may now shrink, and the label ellipsises rather than
+   setting a floor under the whole row. */
+.gauge{display:grid;grid-template-columns:minmax(0,1fr) minmax(46px,108px) minmax(30px,46px);
+  align-items:center;gap:.5em;margin-bottom:.7em}
+.gauge label{font:700 11px/1 var(--display);letter-spacing:.10em;color:var(--ink-dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Three pixels with a glow is an instrument readout. Twelve with a
    rounded end is something a hand could have pressed into the bench. */
 .gauge .bar{height:12px;background:var(--ash-3);border-radius:8px;overflow:hidden;position:relative;
@@ -258,9 +270,22 @@ html,body{
 #vitals b{color:var(--ink);font-weight:800}
 
 /* ---------------- tools ---------------- */
+/* The bottom of the screen is a stack, not three things that happen to
+   be near each other.
+   It used to be three: the hint bar sat at bottom:0, the tool belt at
+   3.4 pads and the side panel at 4.6, each measured from the floor and
+   none of them aware of the others. On a wide screen that looked fine,
+   because the centred belt was nowhere near the right-hand panel. Turn
+   an iPad upright and the belt — 404px of it, and taller still under the
+   coarse-pointer rules — reached across to meet the panel and sat on top
+   of the glaze list, and the hint line ran underneath the buttons.
+   So the two heights are measured and published (Hud._measure), and
+   everything above stands on what is below it. Nothing can drift into
+   anything else, whatever the pointer, the tool count or the length of
+   the hint text. */
 #tools{
   position:absolute;left:50%;transform:translateX(-50%);
-  bottom:calc(var(--pad)*3.4);
+  bottom:calc(var(--bar-h) + var(--pad)*0.7);
   display:flex;gap:6px;
   padding:7px;border-radius:22px;
 }
@@ -341,17 +366,27 @@ html,body{
    internal overflow does the rest. */
 #context{
   right:calc(var(--pad)*1.4);
-  top:calc(22vh + 250px);
-  bottom:calc(var(--pad)*4.6);
-  width:min(266px,24vw);
-  overflow:auto;
+  /* under the gauges when there are gauges, under the header when there
+     are not — measured either way, rather than reserving 250px of room
+     for instruments that may not be on screen */
+  top:calc(max(var(--top-h), var(--gauge-b)) + var(--pad)*0.8);
+  /* stands on the tool belt, which stands on the hint bar. --belt-h is
+     0 in the kiln, where there is no belt, so the panel takes that room
+     back instead of leaving a gap where the buttons would have been. */
+  bottom:calc(var(--bar-h) + var(--belt-h) + var(--pad)*1.3);
+  width:min(392px,34vw);
+  /* a column, so the bucket shelf can take the slack and the controls
+     under it stay put */
+  display:flex;flex-direction:column;overflow:hidden;
 }
-/* With no gauges above it, the panel can start where they would have
-   been. Reserving that space regardless is what forced the kiln's
-   schedule — five sliders, a curve and a readout — into a third of the
-   height it needs, so the one screen in the game that is nothing but
-   controls arrived scrolled. */
-#hud.no-gauges #context{ top:22vh; }
+/* The kiln has no one list to give: it is a curve and six controls that
+   all have to be reachable, so it scrolls as a whole if it must. */
+#context.kiln{ display:block;overflow:auto; }
+/* The `no-gauges` case is in the `top` above now: --gauge-b is 0 when
+   the instruments are not on screen, so max() falls through to the
+   header and the kiln gets the room without a second rule to keep in
+   step with the first. The class is still set, for anything else that
+   wants to know. */
 
 /* The kiln is a whole phase spent in this panel and nothing else, so it
    gets the room to be read at a glance. */
@@ -372,23 +407,45 @@ html,body{
 .slider-row.showing .slider-why{display:block}
 #context.kiln .slider-row{ margin:.55em 0; }
 #context.kiln .readout{ line-height:1.9; }
-@media (max-height:820px){
+@media (max-height:900px){
   #context.kiln #curve{ height:74px; }
   #context.kiln .slider-row{ margin:.42em 0; }
+}
+/* A laptop in a half-height window. The schedule is one screen or it is
+   not a schedule — you cannot judge a curve you have to scroll past to
+   see the slider that shapes it. */
+@media (max-height:760px){
+  #context.kiln #curve{ height:60px; }
+  #context.kiln .slider-row{ margin:.28em 0; }
+  #context.kiln .readout{ line-height:1.65; }
 }
 #context::-webkit-scrollbar{width:5px}
 #context::-webkit-scrollbar-thumb{background:#4A352428;border-radius:3px}
 
-.glaze-list{display:flex;flex-direction:column;gap:3px}
+/* Two columns, because twelve buckets in one are 864px of list in a
+   panel 460px tall — you scrolled to find a glaze you had already seen,
+   and the bottom four were never on screen at the same time as the top
+   four you were choosing between. A bucket shelf is something you look
+   along, not something you page through.
+
+   And when there is still not room, it is the SHELF that scrolls, not
+   the panel. Scrolling the panel took the coat-thickness slider off the
+   bottom of the screen — the one control you reach for between every
+   two coats — to make room for buckets you were not looking at. */
+.glaze-list{display:grid;grid-template-columns:1fr 1fr;gap:2px 5px;
+  overflow:auto;min-height:0;align-content:start}
 .glaze{
-  display:grid;grid-template-columns:22px 1fr auto;gap:.7em;align-items:center;
-  padding:.55em .5em;border-radius:10px;cursor:pointer;border:1px solid transparent;
+  display:grid;grid-template-columns:20px 1fr auto;gap:.5em;align-items:center;
+  padding:.34em .4em;border-radius:10px;cursor:pointer;border:1px solid transparent;
   transition:background .16s ease,border-color .16s ease;
+  min-width:0;
 }
+.glaze > span{min-width:0}
+.glaze .gn, .glaze .gt{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .glaze:hover{background:#4A35240f}
 .glaze.sel{background:#4A35240d;border-color:#4A352433}
 .glaze .sw{
-  width:22px;height:22px;border-radius:50%;
+  width:20px;height:20px;border-radius:50%;
   /* Cocoa, not black. At 47% black the dark glazes — tenmoku, cobalt,
      oxblood — all crushed toward the same flat black and could not be told
      apart, on the one control the whole glazing phase runs through. */
@@ -449,8 +506,14 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radiu
 #curve{width:100%;height:96px;display:block;margin:.4em 0 .8em;border:2px solid var(--ash-4);border-radius:10px;background:var(--ash-2)}
 
 /* ---------------- toasts ---------------- */
+/* Below the header, wherever the header ends. A flat 7.5 pads put these
+   at about 88px, which cleared the two lines the header used to have and
+   not the three it has once a tool description is showing — so the very
+   first toast of the game, the one that explains the wheel, landed on
+   the sentence explaining the tool. */
 #toasts{
-  position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--pad)*7.5);
+  position:absolute;left:50%;transform:translateX(-50%);
+  top:calc(var(--top-h) + var(--pad)*0.7);
   display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none;
 }
 .toast{
@@ -616,12 +679,64 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radiu
 /* cursor states while working */
 body.grabbing canvas#gl{cursor:none}
 
+/* Narrow windows.
+   This was written for a small desktop window and then an iPad turned
+   upright walked into it at 834px, which is not the same thing at all.
+   Two of its rules did real damage there: a hardcoded `bottom` that
+   overrode the stack and dropped the glaze list under the tool belt,
+   and a 190px panel — half the room available — that a two-column
+   bucket shelf cannot live in. Neither is set here now. */
 @media (max-width:900px){
   #commission{display:none}
   #gauges{width:190px;top:15vh}
-  #context{top:calc(15vh + 230px);bottom:calc(var(--pad)*4.6);width:190px}
-  .tool{width:48px;height:54px}
+  #context{top:calc(15vh + 230px);width:min(300px,40vw)}
+  #context.kiln{width:min(340px,46vw)}
   .score-grid{grid-template-columns:1fr}
+}
+/* A small window is not a small finger. Sizing the targets by width
+   alone undid the whole coarse-pointer block on an upright tablet,
+   which is narrow AND touched: the tool buttons went back to 48px
+   there, under the 44pt that a thumb needs. */
+@media (max-width:900px) and (pointer:fine){
+  .tool{width:48px;height:54px}
+}
+/* Below this there is genuinely no room for two columns of buckets. */
+@media (max-width:620px){
+  .glaze-list{grid-template-columns:1fr}
+}
+
+/* ============================================================
+   TOUCH.
+   ============================================================
+   This block used to sit near the top of the file, and every line of it
+   was dead. A media query adds no specificity, so a rule inside one is
+   beaten by any equally specific rule that comes LATER — and all eight
+   of these were re-declared further down: .tool at 285, .menu button at
+   616, .btn at 321, input[type=range] at 458, .glaze at 428, .seg
+   button at 470. Measured with a coarse pointer emulated, the range
+   input computed to 16px and .btn to 11.55px of padding, exactly as on
+   a desktop. Every touch enlargement the game thought it was making had
+   never once been applied.
+   Nothing here is new. It is the same block, at the end, where it wins.
+
+   A tool button at 48px is fine under a mouse and too small under a
+   thumb; 44px is the size everyone converged on, and a range slider's
+   thumb is the worst offender in the interface at 18. */
+@media (pointer:coarse){
+  .tool{width:60px;height:66px}
+  .menu button{padding:1.2em 1.25em}
+  .btn{padding:1.15em 1.7em}
+  input[type=range]{height:34px}
+  input[type=range]::-webkit-slider-thumb{width:26px;height:26px}
+  input[type=range]::-moz-range-thumb{width:26px;height:26px}
+  .glaze{padding:.44em .45em}
+  .seg button{padding:1em .2em}
+
+  /* The side panel too: an upright iPad matches both this and the
+     narrow-window block, and whichever is written last decides. A
+     tablet is touched whatever its width, so this is. */
+  #context{ width:min(420px,50vw); }
+  #context.kiln{ width:min(410px,48vw); }
 }
 
 /* ---------------- the hand: what a press will do ---------------- */
@@ -664,11 +779,24 @@ body.grabbing canvas#gl{cursor:none}
    13,000 square pixels of the one object the whole game is about. It now
    sits in the band between the foot of the pot and the tool bar, and it
    is a strip rather than a slab. */
+/* The one line that tells you what to do next, and it was landing on
+   the two panels either side of it.
+   left:50% with no right makes an absolutely positioned box shrink to
+   fit inside the half of the screen that is left of it, so max-width was
+   dead below about 1560px and the coach's left edge sat at exactly 25%
+   of the window — straight through the commission card on anything
+   under ~1300px, every brief, at every size tested. And its bottom was
+   measured from the floor rather than from the tool belt, so the belt
+   covered the descenders of its last line.
+   Now it is centred between left:0 and right:0, which lets max-width
+   mean something, and that max-width is told how much middle the side
+   panels have left it. */
 #coach{
-  position:absolute;left:50%;transform:translateX(-50%);
-  bottom:calc(var(--pad)*8);
+  position:absolute;left:0;right:0;
+  margin-inline:auto;width:fit-content;
+  bottom:calc(var(--bar-h) + var(--belt-h) + var(--pad)*1.1);
   display:flex;align-items:center;gap:.85em;
-  max-width:min(780px,88vw);
+  max-width:min(780px, calc(100vw - 2*var(--side-w) - var(--pad)*2));
   padding:.68em 1.35em;border-radius:18px;
   opacity:0;transition:opacity .45s ease;
   pointer-events:none;
@@ -685,3 +813,8 @@ body.grabbing canvas#gl{cursor:none}
 #coach.done{border-color:var(--celadon);background:#EAF6F0}
 #coach.done #coach-step{background:var(--celadon);color:#FBF0DF;border-color:var(--celadon)}
 
+
+/* The firing-mode note. It is not a slider explanation but it wants the
+   same quiet voice, and unlike those it is always showing: it is the
+   only thing in the panel when the Guild has the kiln. */
+.guild-note{ display:block; margin:.2em 0 .9em; }

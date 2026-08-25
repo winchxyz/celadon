@@ -8,6 +8,7 @@ import { Studio } from './render/studio.js';
 import { Game } from './game/game.js';
 import { HUD } from './ui/hud.js';
 import { Audio } from './audio/audio.js';
+import { layoutCheck } from './dev/layoutcheck.js';
 
 const boot = document.getElementById('boot');
 const bootBar = document.querySelector('#boot-bar i');
@@ -146,6 +147,18 @@ async function main() {
   }
   requestAnimationFrame(frame);
 
+  /* Safari's own pinch, which the game's pinch sets off.
+     iOS has ignored user-scalable=no since version 10, so two fingers on
+     the pot zoom the camera AND zoom the page. The page zoom changes the
+     visual viewport, which fires resize, which used to rebuild every
+     render target in the chain — while the player was still pinching.
+     These three are WebKit-only and do nothing anywhere else. */
+  for (const g of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(g, (e) => e.preventDefault(), { passive: false });
+  }
+  // and a double-tap is a zoom too, on the one surface that must not move
+  eng.renderer.domElement.addEventListener('dblclick', (e) => e.preventDefault());
+
   // expose for debugging and for automated smoke runs
   window.CELADON = {
     eng, studio, game, hud, audio,
@@ -154,6 +167,10 @@ async function main() {
       for (let i = 0; i < n; i++) { game.update(dt); eng.rig.update(dt); }
       eng.render(dt);
     },
+    /** What is sitting on top of what, and what is being cut off.
+     *  CELADON.layout({coarse:1}) asks the same with the tablet
+     *  stylesheet applied, which is the only place it ever went wrong. */
+    layout: layoutCheck,
   };
 }
 
@@ -161,6 +178,21 @@ function pickQuality() {
   const mem = navigator.deviceMemory ?? 8;
   const cores = navigator.hardwareConcurrency ?? 8;
   const small = Math.min(window.innerWidth, window.innerHeight) < 720;
+
+  /* A touchscreen is a shared memory bus and a battery, whatever it
+     claims about cores.
+     Safari reports no deviceMemory at all, so the fallback of 8 sent
+     every iPad down the high chain: a half-float target at twice the
+     pixel ratio with 4x multisampling, a bloom pyramid and SMAA on top
+     of it. On an 11-inch iPad that is a 2388x1668 buffer and something
+     like a quarter of a gigabyte of GPU memory. A tablet under that
+     kind of pressure does not slow down, it drops the WebGL context —
+     and a dropped context is a black frame, appearing at no particular
+     moment, which is exactly what was reported. */
+  const touch = (navigator.maxTouchPoints ?? 0) > 1
+    || matchMedia('(pointer:coarse)').matches;
+  if (touch) return 'medium';
+
   if (mem <= 4 || cores <= 4 || small) return 'medium';
   return 'high';
 }

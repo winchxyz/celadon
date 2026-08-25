@@ -813,20 +813,47 @@ export class Studio {
       return m;
     };
     this.kilnMats = kilnMats;
-    box(W, TH, D, 0, -46 + TH / 2, 0);                 // floor
-    box(W, TH, D, 0, -46 + H - TH / 2, 0);             // crown
-    box(TH, H, D, -W / 2 + TH / 2, -46 + H / 2, 0);    // left
-    box(TH, H, D, W / 2 - TH / 2, -46 + H / 2, 0);     // right
-    box(W, H, TH, 0, -46 + H / 2, -D / 2 + TH / 2);    // back
 
-    // front wall with the spy hole / door opening
+    /* The bricks flickered, and it was not the texture.
+       Every slab was cut to the kiln's FULL depth and full height and
+       then pushed into place, so the side walls ran down through the
+       floor and out through the back. Wherever two of them shared a
+       volume they also presented the same face at the same depth --
+       sixteen such pairs, the worst a 12 x 118 strip down each back
+       corner and a 12 x 62 one on each door jamb, which is the face
+       you stare at for the whole firing. Two coplanar surfaces at
+       identical depth give the depth test nothing to choose between,
+       so it chooses differently from pixel to pixel and frame to
+       frame. That is the flicker.
+       A real kiln is not built that way either: courses butt against
+       one another. So each slab is cut to the gap it actually fills.
+       Floor and crown keep the full footprint; the walls stand
+       BETWEEN them; the back and front sit BETWEEN the walls. Nothing
+       intersects anything, and the chamber is unchanged. */
+    const y0 = -46;
+    const inH = H - TH * 2;              // clear height between floor and crown
+    const inW = W - TH * 2;              // clear width between the side walls
+    const midY = y0 + TH + inH / 2;      // centre of that clear height
+
+    box(W, TH, D, 0, y0 + TH / 2, 0);                    // floor
+    box(W, TH, D, 0, y0 + H - TH / 2, 0);                // crown
+    box(TH, inH, D, -W / 2 + TH / 2, midY, 0);           // left, between them
+    box(TH, inH, D, W / 2 - TH / 2, midY, 0);            // right
+    box(inW, inH, TH, 0, midY, -D / 2 + TH / 2);         // back, between the walls
+
+    // front wall with the door opening, cut to the same clear span
     // the door must sit above the kiln floor, or you can see under the shelf
-    const doorW = 54, doorH = 62, doorY = -46 + TH + 34;
+    const doorW = 54, doorH = 62, doorY = y0 + TH + 34;
     const fz = D / 2 - TH / 2;
-    box(W, (-46 + H) - (doorY + doorH / 2), TH, 0, (doorY + doorH / 2 + (-46 + H)) / 2, fz);
-    box(W, (doorY - doorH / 2) - (-46), TH, 0, (-46 + doorY - doorH / 2) / 2, fz);
-    box((W - doorW) / 2, doorH, TH, -(W + doorW) / 4, doorY, fz);
-    box((W - doorW) / 2, doorH, TH, (W + doorW) / 4, doorY, fz);
+    const inTop = y0 + H - TH;           // underside of the crown
+    const inBot = y0 + TH;               // top of the floor
+    const lintel = inTop - (doorY + doorH / 2);
+    const sill = (doorY - doorH / 2) - inBot;
+    const jamb = (inW - doorW) / 2;
+    box(inW, lintel, TH, 0, inTop - lintel / 2, fz);                    // over the door
+    box(inW, sill, TH, 0, inBot + sill / 2, fz);                        // under it
+    box(jamb, doorH, TH, -(doorW + jamb) / 2, doorY, fz);               // left jamb
+    box(jamb, doorH, TH, (doorW + jamb) / 2, doorY, fz);                // right jamb
 
     // the mouth: an emissive plane that becomes the brightest thing in the room
     this.kilnMouth = new THREE.Mesh(

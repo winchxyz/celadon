@@ -95,9 +95,16 @@ export function createPotMaterial(opts = {}) {
     // gameplay overlays
     uStressView: { value: 0.0 },
     uGuide: { value: 0.0 },
-    uCursor: { value: new THREE.Vector4(-9, -9, 0, 0) }, // localAngle, arcT, radius(cm), strength
+    // localAngle, arcT, size, strength. What "size" means depends on the
+    // shape below: centimetres for a spot or a band, turns of angle for a
+    // curtain or a ribbon, since those are bounded round the pot and not
+    // along it.
+    uCursor: { value: new THREE.Vector4(-9, -9, 0, 0) },
     uArcLen: { value: 24 },                              // meridian length, cm
-    uCursorBand: { value: 1 },                           // 1 = ring round the pot
+    // 0 spot · 1 band round the pot · 2 curtain down one side · 3 ribbon
+    // running down from the point. See GLAZE_TOOLS, which is where the
+    // shape and the size both come from.
+    uCursorBand: { value: 1 },
     uOpacity: { value: 1.0 },
   };
 
@@ -502,9 +509,36 @@ if (uStressView > 0.01) {
   // it jumped across the pot as the cursor crossed the middle. A band
   // has no side to pick. Glazing keeps the spot, because there the pot
   // is standing still and you really are painting one patch of it.
+  // ...and it has to be the shape of what the tool DOES.
+  //
+  // Every glaze tool drew the same circle. That is true of the brush,
+  // which really does put down a round patch, and a lie about the other
+  // two: pour runs a ribbon from your finger all the way down to the
+  // foot, and spray lays a curtain over the whole height of one side.
+  // Drawn as circles those became a 2.4 cm and a 7.2 cm disc -- and on a
+  // pot with 27 cm of wall the spray disc swallowed the vessel, which is
+  // what made the tools look broken. They were not; the mark was.
   float dbCm = abs(vArc - uCursor.y) * uArcLen;
-  float daCm = abs(fract(vAng - uCursor.x + 0.5) - 0.5) * 6.2831853 * max(vRad, 0.25);
-  float d = (uCursorBand > 0.5 ? dbCm : length(vec2(daCm, dbCm))) / max(uCursor.z, 1e-3);
+  float dAng = abs(fract(vAng - uCursor.x + 0.5) - 0.5);   // turns, 0..0.5
+  float daCm = dAng * 6.2831853 * max(vRad, 0.25);
+  float d;
+  if (uCursorBand > 2.5) {
+    // POUR: a ribbon down one side, starting where you point. Nothing
+    // above that line, and nothing on the inside wall -- glaze runs down.
+    d = dAng / max(uCursor.z, 1e-3);
+    d = max(d, step(uCursor.y, vArc) * 9.0);
+    d = max(d, step(1.5, vSide) * 9.0);
+  } else if (uCursorBand > 1.5) {
+    // SPRAY: a curtain down the outside, full height, no top or bottom.
+    d = dAng / max(uCursor.z, 1e-3);
+    d = max(d, step(1.5, vSide) * 9.0);
+  } else if (uCursorBand > 0.5) {
+    // THROWING: a band right round the pot, because the wheel is turning.
+    d = dbCm / max(uCursor.z, 1e-3);
+  } else {
+    // BRUSH: a spot, which is the one case where a circle was honest.
+    d = length(vec2(daCm, dbCm)) / max(uCursor.z, 1e-3);
+  }
   float ring = sstep(1.02, 0.90, d) * sstep(0.60, 0.80, d);
   // Quietly. It marks where your hand is; it is not meant to be the
   // brightest thing in the room, and anything emissive here also feeds

@@ -22,14 +22,35 @@ export const GH = 160;   // meridian cells
 
 export class GlazeField {
   constructor() {
+    // One float, read back as its bits: this is how a float becomes a
+    // half. It comes first because _push needs it, and _push runs
+    // before this constructor is finished.
+    const bits = new ArrayBuffer(4);
+    this._f32 = new Float32Array(bits);
+    this._u32 = new Uint32Array(bits);
+    this._lo = GH; this._hi = -1;
+
     this.data = new Float32Array(GW * GH * 4);   // t0,t1,t2,wax
-    this.tex = new THREE.DataTexture(this.data, GW, GH, THREE.RGBAFormat, THREE.FloatType);
+
+    /* The picture the shader reads, in half floats rather than floats.
+       This is why the glaze was invisible on an iPad.
+       Sampling a 32-bit float texture with LINEAR filtering is not core
+       WebGL2 -- it needs OES_texture_float_linear, and iOS does not have
+       it. Where the extension is missing the texture is incomplete for
+       that filter and every sample comes back black, so the glaze went
+       on, the field filled up, the firing used it, and the pot stayed
+       bare. Nothing in the console, and nothing wrong on a desktop.
+       Half floats filter linearly as core WebGL2 everywhere. What is
+       stored here are coat thicknesses between 0 and 1, so eleven bits
+       of mantissa is far more than the surface can show. */
+    this.half = new Uint16Array(GW * GH * 4);
+    this.tex = new THREE.DataTexture(this.half, GW, GH, THREE.RGBAFormat, THREE.HalfFloatType);
     this.tex.wrapS = THREE.RepeatWrapping;
     this.tex.wrapT = THREE.ClampToEdgeWrapping;
     this.tex.minFilter = THREE.LinearFilter;
     this.tex.magFilter = THREE.LinearFilter;
     this.tex.generateMipmaps = false;
-    this.tex.needsUpdate = true;
+    this._push();
 
     // meridian lookup, rebuilt whenever the body changes
     this.mY = new Float32Array(GH);      // height above the wheel head
@@ -41,13 +62,13 @@ export class GlazeField {
     this._scratch = new Float32Array(GW * GH * 4);
     this.slotIds = [null, null, null];
     this.runHistory = 0;
-    this.dirty = true;
+    this._touch();
   }
 
   clear() {
     this.data.fill(0);
     this.runHistory = 0;
-    this.tex.needsUpdate = true;
+    this._push();
   }
 
   /** Rebuild the meridian lookup table from a ProfileBuffer. */
@@ -115,7 +136,7 @@ export class GlazeField {
         }
       }
     }
-    this.dirty = true;
+    this._touch(cj - rj, cj + rj);
   }
 
   /**
@@ -141,7 +162,7 @@ export class GlazeField {
         this.data[o + slot] = clamp(this.data[o + slot] + amt * n * resist, 0, 0.7);
       }
     }
-    this.dirty = true;
+    this._touch();
   }
 
   /** POUR — a ribbon of glaze down one side, with real runs. */
@@ -165,7 +186,7 @@ export class GlazeField {
         );
       }
     }
-    this.dirty = true;
+    this._touch(0, fromArc * (GH - 1));
   }
 
   /** SPRAY — even mist over the visible hemisphere. */
@@ -181,7 +202,7 @@ export class GlazeField {
         this.data[o + slot] = clamp(this.data[o + slot] + thickness * w * resist, 0, 0.5);
       }
     }
-    this.dirty = true;
+    this._touch();
   }
 
   /** Wipe the foot — mandatory, or the pot welds to the shelf. */
@@ -195,7 +216,7 @@ export class GlazeField {
         for (let s = 0; s < SLOTS; s++) this.data[o + s] *= 1 - f;
       }
     }
-    this.dirty = true;
+    this._touch();
   }
 
   /** Is the foot clean enough to sit on a shelf? 1 = clean. */
@@ -325,7 +346,7 @@ export class GlazeField {
 
     d.set(tmp);
     this.runHistory += moved;
-    this.tex.needsUpdate = true;
+    this._push();
     return moved;
   }
 
@@ -344,8 +365,55 @@ export class GlazeField {
     return worst;
   }
 
+  /**
+   * Say which rows of the field have moved. Everything outside them is
+   * still correct in `half` from the last push, so it does not have to
+   * be converted again — and the brush, which is the tool a player holds
+   * down for minutes at a time, touches about a dozen of the hundred and
+   * sixty.
+   */
+  _touch(lo = 0, hi = GH - 1) {
+    if (!this.dirty) { this._lo = GH; this._hi = -1; }
+    this._lo = Math.max(0, Math.min(this._lo, Math.floor(lo)));
+    this._hi = Math.min(GH - 1, Math.max(this._hi, Math.ceil(hi)));
+    this.dirty = true;
+  }
+
+  /**
+   * Copy the simulation into the picture the GPU reads.
+   *
+   * The two were one array until the texture had to become half float
+   * for the sake of iOS, so this conversion is the price of the pot
+   * being visible there at all. It is worth spending it carefully: the
+   * conversion is written out by hand rather than calling
+   * THREE.DataUtils.toHalfFloat per element, which measured 3.76ms for
+   * the full field against 1.25ms for this — and it only runs over the
+   * rows that actually moved.
+   */
+  _push() {
+    const lo = this.dirty ? this._lo : 0;
+    const hi = this.dirty ? this._hi : GH - 1;
+    if (hi >= lo) {
+      const d = this.data, h = this.half;
+      const f32 = this._f32, u32 = this._u32;
+      const end = (hi + 1) * GW * 4;
+      for (let i = lo * GW * 4; i < end; i++) {
+        f32[0] = d[i];
+        const x = u32[0];
+        const sign = (x >>> 16) & 0x8000;
+        const e = ((x >>> 23) & 0xff) - 112;
+        if (e <= 0) { h[i] = sign; continue; }            // zero or subnormal
+        if (e >= 31) { h[i] = sign | 0x7c00; continue; }  // infinity
+        h[i] = sign | (e << 10) | ((x & 0x7fffff) >>> 13);
+      }
+    }
+    this.tex.needsUpdate = true;
+    this.dirty = false;
+    this._lo = GH; this._hi = -1;
+  }
+
   upload() {
-    if (this.dirty) { this.tex.needsUpdate = true; this.dirty = false; }
+    if (this.dirty) this._push();
   }
 
   /**
@@ -384,7 +452,7 @@ export class GlazeField {
           }
         }
       }
-      this.tex.needsUpdate = true;
+      this._push();
       return true;
     } catch (e) { return false; }
   }

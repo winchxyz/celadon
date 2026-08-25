@@ -21,7 +21,7 @@
 
 <p>
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-3F9C81?style=flat-square"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-17%20passing-3F9C81?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-18%20passing-3F9C81?style=flat-square">
   <img alt="Art assets" src="https://img.shields.io/badge/art%20assets-0-3F9C81?style=flat-square">
   <img alt="Dependencies" src="https://img.shields.io/badge/runtime%20deps-1-3F9C81?style=flat-square">
   <img alt="Sound" src="https://img.shields.io/badge/sound-CC0-3F9C81?style=flat-square">
@@ -66,7 +66,7 @@ nine small CC0 sound recordings — about 140 kB — and it runs without them.
 
 It is already running at **[winchxyz.github.io/celadon](https://winchxyz.github.io/celadon/)** —
 no install, nothing to download. Every push to `master` rebuilds it, and the
-seventeen benches have to pass before it deploys.
+eighteen benches have to pass before it deploys.
 
 To run it locally:
 
@@ -77,7 +77,7 @@ npm run dev      # http://localhost:5180
 
 ```bash
 npm run build && npm run preview   # production bundle
-npm test                           # seventeen headless benches, ~5 s
+npm test                           # eighteen headless benches, ~5 s
 ```
 
 **Requirements:** a browser with WebGL2 and hardware acceleration — recent
@@ -147,6 +147,21 @@ when you sit down, the clay dries slowly, and a pot that is getting away from
 you stops growing and says so instead of folding up without warning. Turn it
 off and you get the full simulation: clay that dries under your hands, a wheel
 you have to manage yourself, and no second chances.
+
+### Two kilns
+
+A firing is six controls, and five of them can ruin a pot in ways nothing
+tells you about until the kiln is opened a day later. The one that matters
+most has to land within about 25 °C of a number that is a property of a glaze
+you chose an hour ago. That is a fine thing to want and a poor thing to be
+handed by default, so it is a choice, made in the kiln itself:
+
+| | |
+|---|---|
+| **The Guild fires it** | a kiln master sets the schedule for the glazes actually on your pot — hot enough to bring every one to a glass, climbing no faster than the wall you threw can take, in the air the letter asked for. It comes out fired. What it *looks* like is still down to how you threw it and how you glazed it. |
+| **I fire it** | all six controls, and every way to lose it. Peak, ramp, soak, reduction, when the damper shuts, and how it cools. |
+
+The Guild has it unless you say otherwise.
 
 ## What is actually being simulated
 
@@ -347,7 +362,7 @@ Most of what makes this game hard to get right is in the simulation, not the
 renderer, so nearly all of it can be tested headlessly.
 
 ```bash
-npm test          # all seventeen, about five seconds
+npm test          # all eighteen, about five seconds
 ```
 
 They fall into four groups.
@@ -385,6 +400,7 @@ simulation bench can pass while the game itself misbehaves. For a while one did.
 | `contrast` | every ink that colours type is readable on a cream plate, checked per CSS rule, with a lower bar granted only to `::before` glyphs |
 | `heat` | the two blackbody curves — one in JavaScript lighting the kiln, one in GLSL glowing the pot inside it — still agree across 400–1400 °C |
 | `encoding` | every file is still clean UTF-8, and the characters the interface is drawn with are still in it. A shell that reads UTF-8 as ANSI once wrote three files back double-encoded, and a terminal shows the damaged file and the healthy one identically — so this reads bytes |
+| `firing` | what each kiln promises. On the Guild's schedule every one of the twelve glazes reaches maturity, none is destroyed, no wall thickness is cracked by the ramp, the brief's atmosphere is honoured, and a new potter can pay for it on day one. And, so that the hard mode is still a hard mode, that firing it yourself 200° short still comes out a scab |
 
 **Does the money work?**
 

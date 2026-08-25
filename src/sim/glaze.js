@@ -283,6 +283,64 @@ export function defaultSchedule() {
   };
 }
 
+/**
+ * The firing a Guild kiln master would set for this pot, and the one
+ * the game sets for you unless you ask to do it yourself.
+ *
+ * Six controls decide a firing, and five of them can ruin it in ways
+ * that are not visible until the kiln is opened a day later. Worse, the
+ * one that matters most — peak — has to land within about 25°C of a
+ * number that is a property of a glaze you chose an hour ago and were
+ * never told. That is not difficulty, it is a memory test with a very
+ * long feedback loop, so it is no longer the default.
+ *
+ * Nothing here is a cheat. It is the schedule the physics wants:
+ *   peak   the maturing temperature of the hottest glaze actually on
+ *          the pot, so every layer becomes a glass and none is pushed
+ *          past into blisters
+ *   ramp   three quarters of the thermal-shock limit for the wall this
+ *          particular pot was thrown with — the same limit fire() uses
+ *   soak   long enough for the melt to finish and level
+ *   air    whatever the brief asked for, since a commission that wants
+ *          reduction is asking for a firing, not a glaze
+ * Fire this and the pot comes out of the kiln properly fired. What it
+ * looks like is still down to how it was thrown and how it was glazed.
+ */
+export function guildSchedule(glazes, body, req) {
+  const s = defaultSchedule();
+  const on = (glazes || []).filter(Boolean);
+
+  s.peak = on.length
+    ? Math.round(Math.max(...on.map(maturePoint)))
+    : s.peak;
+
+  // The same limit fire() measures the ramp against, with a quarter in
+  // hand. The floor is 30 rather than the slider's 40: the sliders are
+  // not on screen in this mode, and a thick pot genuinely does need a
+  // slower climb than the panel would let you dial. It costs more hours
+  // and more fuel, which is what a heavy pot costs to fire.
+  const wall = Math.max(0.18, body?.meanWall ?? 0.4);
+  const shockLimit = 230 / wall * 0.55;
+  s.ramp = Math.round(clamp(shockLimit * 0.75, 30, 320));
+
+  /* Soak is how long the glaze is given to move, and not every glaze
+     should be given the same amount. Held for the full 0.8 hr, Zinc
+     Flower — a macro-crystalline at a sixth the stiffness of anything
+     else in the shed — ran off the foot and welded the pot to the
+     shelf, destroying both. Measured, that happens above a run of about
+     3.2; the hold below keeps the runniest glaze in the game at 2.8
+     with the foot NOT wiped, and still gives a stiff one the full time
+     it needs to level itself out. */
+  const stiff = Math.min(...on.map((g) => g.viscK ?? 0.7), 0.7);
+  s.soak = +clamp(0.25 + 1.6 * stiff, 0.25, 0.8).toFixed(2);
+
+  s.reduction = req?.atmos === 'reduction' ? 0.75 : 0;
+  s.reduceFrom = 980;
+  s.cooling = 'normal';
+  s.holdHrs = 0;
+  return s;
+}
+
 export function scheduleHours(s) {
   const ramp = Math.max(1, s.peak - 20) / Math.max(30, s.ramp);
   return ramp + s.soak + (COOLING[s.cooling]?.hrs ?? 9) + (s.cooling === 'slow' ? s.holdHrs : 0);

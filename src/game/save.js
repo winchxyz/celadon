@@ -25,7 +25,9 @@ export function blankSave() {
     firings: 0,
     crazed: 0,
     stats: { thrown: 0, collapses: 0, centred: 0, drowned: 0, destroyed: 0, sold: 0 },
-    settings: { quality: 'high', music: true, sound: true, hints: true, assist: true },
+    // firing: 'guild' — the kiln master sets the schedule and the pot
+    // comes out fired. 'hand' — six controls and every way to lose it.
+    settings: { quality: 'high', music: true, sound: true, hints: true, assist: true, firing: 'guild' },
   };
 }
 

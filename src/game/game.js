@@ -10,7 +10,7 @@ import { potGeometry, ProfileBuffer, proportions } from '../render/potMesh.js';
 import { createPotMaterial, applyFireResult } from '../render/potMaterial.js';
 import { GlazeField, raycastPot } from '../sim/glazeField.js';
 import {
-  GLAZES, GLAZE_BY_ID, SLOTS, defaultSchedule, fire as fireGlaze, fuelCost,
+  GLAZES, GLAZE_BY_ID, SLOTS, defaultSchedule, guildSchedule, fire as fireGlaze, fuelCost,
   kilnCurve, scheduleHours, COOLING, meltPoint, maturePoint,
 } from '../sim/glaze.js';
 import { COMMISSIONS, FORMS, BODIES, rankFor, OPENING, CODEX, proceduralCommission, targetSize } from './lore.js';
@@ -34,6 +34,37 @@ const BAND_RAD_PER_PX = 0.007;
 const BAND_MAX = 3.2;
 /** One notch of the scroll wheel, for placing a brush exactly. */
 const BAND_NOTCH = Math.PI / 30;   // 6 degrees
+
+/* ---- the glaze tools ---------------------------------------------
+   One table, because the mark drawn on the pot and the glaze that
+   actually lands have to be the same shape and the same size. They were
+   not. Every tool drew a circle: pour drew one of 0.10 while laying down
+   a ribbon of 0.075, and spray drew a 7.2 cm disc for a curtain that
+   runs the whole height of the wall — on a pot with 27 cm of wall that
+   disc covered the vessel, which is what made the tools look broken.
+   Both the field call and the cursor uniform are read from here now, so
+   they cannot drift apart again.
+
+   shape matches uCursorBand in potMaterial.js:
+     0 spot · 2 curtain down one side · 3 ribbon running down. */
+const GLAZE_TOOLS = {
+  brush: { shape: 0, rad: 0.075 },
+  wax:   { shape: 0, rad: 0.06 },
+  spray: { shape: 2, spread: 0.22 },
+  pour:  { shape: 3, widthFrac: 0.075 },
+};
+
+/** Where a gaussian has fallen to half — the distance the eye reads as
+ *  the edge of the mark. k is the exponent's coefficient in the falloff. */
+const halfPower = (k) => Math.sqrt(Math.LN2 / k);
+
+/** The size to hand the shader: centimetres for a spot, turns of angle
+ *  for the two shapes that are bounded round the pot rather than along it. */
+function cursorSize(t, arcLen) {
+  if (t.shape === 0) return t.rad * arcLen;                    // cm
+  if (t.shape === 2) return t.spread * halfPower(2.2);         // turns
+  return t.widthFrac * 0.5 * halfPower(1.4);                   // turns
+}
 
 export class Game {
   constructor(engine, studio, hud, audio) {
@@ -1715,11 +1746,12 @@ export class Game {
       this._dipLineY = frac * c.height;
       cursorOn = 0;
     } else if (hit.hit) {
-      const rad = tool === 'spray' ? 0.30 : tool === 'pour' ? 0.10 : 0.075;
-      u.uArcLen.value = this.pb.arcLen || 24;
-      u.uCursorBand.value = 0;
+      const t = GLAZE_TOOLS[tool] || GLAZE_TOOLS.brush;
+      const arcLen = this.pb.arcLen || 24;
+      u.uArcLen.value = arcLen;
+      u.uCursorBand.value = t.shape;
       u.uCursor.value.set(this._localAngle(hit.angle), hit.arcT,
-        rad * (this.pb.arcLen || 24), 0.9);
+        cursorSize(t, arcLen), 0.9);
       cursorOn = 1;
       this._hit = hit;
     } else {
@@ -1736,14 +1768,14 @@ export class Game {
       // player is not pointing.
       const hAng = hit.hit ? this._localAngle(hit.angle) : 0;
       if (tool === 'brush' && hit.hit) {
-        this.field.brush(hAng, hit.arcT, 0.075, slot, this.glazeThickness * dt * 5.5);
+        this.field.brush(hAng, hit.arcT, GLAZE_TOOLS.brush.rad, slot, this.glazeThickness * dt * 5.5);
       } else if (tool === 'wax' && hit.hit) {
-        this.field.brush(hAng, hit.arcT, 0.06, slot, dt * 3.2, true);
+        this.field.brush(hAng, hit.arcT, GLAZE_TOOLS.wax.rad, slot, dt * 3.2, true);
       } else if (tool === 'pour' && hit.hit) {
-        this.field.pour(hAng, 0.075, slot, this.glazeThickness * dt * 3.4, hit.arcT);
+        this.field.pour(hAng, GLAZE_TOOLS.pour.widthFrac, slot, this.glazeThickness * dt * 3.4, hit.arcT);
         if (this.rng() < dt * 10) this.audio.splash(0.07);
       } else if (tool === 'spray' && hit.hit) {
-        this.field.spray(hAng, slot, this.glazeThickness * dt * 1.5, 0.30);
+        this.field.spray(hAng, slot, this.glazeThickness * dt * 1.5, GLAZE_TOOLS.spray.spread);
       }
       this.field.upload();
     }
@@ -1805,10 +1837,25 @@ export class Game {
       ? onPot.reduce((a, b) => (maturePoint(b) > maturePoint(a) ? b : a))
       : null;
     const need = needs ? { name: needs.name, temp: maturePoint(needs) } : null;
+
+    // In the Guild's hands unless the player has asked for the kiln.
+    // Recomputed on arrival rather than remembered, because it depends
+    // on the glazes that ended up on THIS pot and the wall it was
+    // thrown with, neither of which was known when the last one fired.
+    if (this.firingMode() === 'guild') this._setGuildSchedule();
+
     this.hud.kilnPanel(
       this.schedule,
-      () => this.hud.updateKilnPanel(this.schedule, this.save.coin),
-      null,
+      () => this.hud.updateKilnPanel(this.schedule, this.save.coin, need),
+      {
+        mode: this.firingMode(),
+        onMode: (m) => {
+          this.save.settings.firing = m;
+          this.audio.click();
+          if (m === 'guild') this._setGuildSchedule();
+          this.startKiln();          // rebuild the panel in the new mode
+        },
+      },
     );
     this.hud.updateKilnPanel(this.schedule, this.save.coin, need);
 
@@ -1816,6 +1863,22 @@ export class Game {
     this._moveTo = new THREE.Vector3(KILN_POS.x, this.studio.kilnShelfY, KILN_POS.z);
     this.eng.rig.frame(
       new THREE.Vector3(KILN_POS.x, this.studio.kilnShelfY + 14, KILN_POS.z + 8), 150, 1.36, -0.10
+    );
+  }
+
+  /** 'guild' or 'hand'. Guild unless the player has said otherwise. */
+  firingMode() { return this.save.settings.firing === 'hand' ? 'hand' : 'guild'; }
+
+  /**
+   * Hand the kiln to the Guild: the schedule that fires the glazes that
+   * are actually on this pot, at a rate this wall can take, in the air
+   * the brief asked for.
+   */
+  _setGuildSchedule() {
+    this.schedule = guildSchedule(
+      this.slots.filter(Boolean),
+      this.clay ? this.clay.metrics() : null,
+      this.commission?.require,
     );
   }
 

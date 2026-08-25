@@ -69,11 +69,18 @@ export class HUD {
     this.toasts = $('#toasts');
     this.toolbar = $('#tools');
     this.context = $('#context');
+    this.bottomBar = $('#hud-bottom');
+    this.topBar = $('#hud-top');
+    this.gauges = $('#gauges');
+    this.commission = $('#commission');
     this.tool = null;
     this._toolset = null;
     this._toastQ = [];
 
     $('#advance').addEventListener('click', () => this.game.advance());
+
+    this._measure();
+    addEventListener('resize', () => this._measure());
 
     // The wheel gauge doubles as the pedal: scrolling is nice when it
     // works, but a bar you can grab is one nobody has to be told about.
@@ -121,6 +128,51 @@ export class HUD {
     $('#led-rep').textContent = rankFor(s.rep).name;
   }
 
+  /**
+   * Publish the height of the things stacked along the bottom of the
+   * screen, so that everything standing on them can stand on a measured
+   * number instead of a guessed one.
+   *
+   * Both were assumed constant and neither is. The hint bar wraps to two
+   * lines as soon as the window is narrow, and the tool belt is taller
+   * under a thumb than under a mouse and changes height with the tool
+   * count. That is why the belt ended up over the hint line and the
+   * glaze panel ended up over the belt on an upright iPad, while a wide
+   * desktop window showed nothing wrong at all.
+   */
+  _measure() {
+    const s = document.documentElement.style;
+    const shown = (e) => e && getComputedStyle(e).display !== 'none';
+    const box = (e) => (shown(e) ? e.getBoundingClientRect() : null);
+    const h = (e) => { const r = box(e); return r ? Math.round(r.height) : 0; };
+
+    // Along the bottom: the hint bar, and the tool belt standing on it.
+    s.setProperty('--bar-h', `${h(this.bottomBar)}px`);
+    s.setProperty('--belt-h', `${h(this.toolbar)}px`);
+
+    // Along the top: the header, which grows by a whole line whenever a
+    // tool description appears under the stage hint. The panels below it
+    // were pinned at 19vh and 22vh, so on a wide short window the header
+    // simply grew down through them.
+    s.setProperty('--top-h', `${h(this.topBar)}px`);
+
+    // The gauges, when there are gauges. The right-hand panel used to
+    // reserve their room with a flat +250px whether they were there or
+    // not, which is what squeezed the kiln schedule into a third of the
+    // height it needs.
+    const g = box(this.gauges);
+    s.setProperty('--gauge-b', `${g ? Math.round(g.bottom) : 0}px`);
+
+    // How far the side panels reach in from either edge, so that the
+    // coach line can be told how much middle is actually left. It is
+    // centred, so what binds it is the wider of the two intrusions.
+    const l = box(this.commission);
+    const r = box(this.context);
+    const reach = Math.max(l ? Math.round(l.right) : 0,
+                           r ? Math.round(innerWidth - r.left) : 0, 0);
+    s.setProperty('--side-w', `${reach}px`);
+  }
+
   setKeyHints(pairs) {
     // On a tablet, half of these name hardware that is not there. The
     // gestures do the same jobs, so the same line says them in the words
@@ -155,6 +207,7 @@ export class HUD {
       seen.add(key); return true;
     });
     $('#keyhints').innerHTML = uniq.map(([k, v]) => `<b>${k}</b> ${v}`).join('   ·   ');
+    this._measure();   // this line wraps on a narrow screen and the bar grows
   }
 
   setAdvance(label, enabled = true) {
@@ -166,7 +219,7 @@ export class HUD {
   /* ---------------- commission ---------------- */
 
   setCommission(c, met) {
-    if (!c) { $('#commission').classList.add('hidden'); return; }
+    if (!c) { $('#commission').classList.add('hidden'); this._measure(); return; }
     $('#commission').classList.remove('hidden');
     $('#com-title').textContent = c.title;
     $('#com-from').textContent = c.from;
@@ -200,11 +253,12 @@ export class HUD {
 
   showGauges(on) {
     $('#gauges').classList.toggle('hidden', !on);
-    // The context panel below sits 250px down to clear the gauges. When
-    // the gauges are not there - the glaze room and the kiln - that is
-    // 250px of reserved emptiness, and it was pushing the kiln schedule
-    // off the bottom of the screen and making it scroll.
     $('#hud').classList.toggle('no-gauges', !on);
+    // The panel below used to clear the gauges with a flat +250px whether
+    // they were there or not. Their real bottom edge is published instead,
+    // and is 0 when they are gone, so the kiln gets the room back rather
+    // than reserving space for instruments it does not have.
+    this._measure();
   }
 
   /* ---------------- toolbar ---------------- */
@@ -214,7 +268,17 @@ export class HUD {
     this._toolset = name;
     this.toolbar.innerHTML = '';
     const set = TOOLSETS[name] ?? [];
-    if (!set.length) { this.toolbar.classList.add('hidden'); return; }
+    if (!set.length) {
+      // ...and take the description with it. This returned before
+      // selectTool ran, so the kiln and the firing both sat there with
+      // "The evenest coat there is" under the stage name — the DIP tool,
+      // in two stages that have no tools at all — holding the header a
+      // line taller than it needed to be the whole time.
+      this.toolbar.classList.add('hidden');
+      this.setToolTip('');
+      this._measure();
+      return;
+    }
     this.toolbar.classList.remove('hidden');
     for (const t of set) {
       const b = el('button', 'tool');
@@ -230,6 +294,7 @@ export class HUD {
       this.toolbar.appendChild(b);
     }
     this.selectTool(selected ?? set[0].id);
+    this._measure();   // another toolset is another belt height
   }
 
   selectTool(id) {
@@ -253,6 +318,7 @@ export class HUD {
     if (!e) return;
     e.innerHTML = text || '';
     e.classList.toggle('on', !!text);
+    this._measure();   // a description is a whole extra line of header
   }
 
   toolKeys() {
@@ -391,7 +457,7 @@ export class HUD {
 
   /* ---------------- context panels ---------------- */
 
-  hideContext() { this.context.classList.add('hidden'); }
+  hideContext() { this.context.classList.add('hidden'); this._measure(); }
 
   glazePanel(state, onPick, onThick) {
     const c = this.context;
@@ -436,18 +502,52 @@ export class HUD {
     }
   }
 
-  kilnPanel(sched, onChange, fireNow) {
+  kilnPanel(sched, onChange, firing) {
     this.context.classList.add('kiln');
     const c = this.context;
     c.classList.remove('hidden');
     c.innerHTML = '';
     c.appendChild(el('div', 'panel-h', '<span class="glyph">◍</span> FIRING SCHEDULE'));
 
+    /* Who is firing this kiln.
+       Six controls decide a firing and five of them can ruin it in ways
+       nothing tells you about until the kiln is opened. That is a fine
+       thing to want and a terrible thing to be given by default, so it
+       is a choice, made here, where the kiln is. */
+    const mode = firing?.mode ?? 'hand';
+    if (firing?.onMode) {
+      const seg = el('div', 'seg');
+      for (const [k, label] of [['guild', 'The Guild fires it'], ['hand', 'I fire it']]) {
+        const b = el('button', mode === k ? 'sel' : '', label);
+        b.title = k === 'guild'
+          ? 'A kiln master sets the schedule for the glazes on this pot. It comes out fired.'
+          : 'You set all six controls. Everything that can go wrong in a kiln can go wrong.';
+        b.addEventListener('click', () => { if (k !== mode) firing.onMode(k); });
+        seg.appendChild(b);
+      }
+      const row = el('div', 'slider-row');
+      row.innerHTML = '<label>THE KILN</label>';
+      row.appendChild(seg);
+      c.appendChild(row);
+    }
+
     const canvas = el('canvas');
     canvas.id = 'curve';
     canvas.width = 480; canvas.height = 192;
     c.appendChild(canvas);
     this.curveCanvas = canvas;
+
+    if (mode === 'guild') {
+      c.appendChild(el('div', 'slider-why guild-note',
+        'The Guild has set this firing for the glaze on your pot: hot enough to '
+        + 'bring it to a glass, climbing no faster than the wall can take, and in '
+        + 'the air the letter asked for. What comes out is down to how you threw '
+        + 'it and how you glazed it.'));
+      this.kilnReadout = el('div', 'readout');
+      c.appendChild(this.kilnReadout);
+      this.updateKilnPanel(sched);
+      return;
+    }
 
     const slider = (key, label, min, max, step, fmtFn, why) => {
       const row = el('div', 'slider-row');
