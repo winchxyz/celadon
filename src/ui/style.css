@@ -78,13 +78,40 @@
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden;background:#F4E7D2;}
+html,body{
+  height:100%;overflow:hidden;background:#F4E7D2;
+  /* On a tablet every one of these is the browser taking a gesture the
+     game needs. Without touch-action a finger on the clay scrolls the
+     page instead of pulling the wall; without the rest, a press-and-hold
+     on the pot raises a selection menu over it. */
+  touch-action:none;
+  overscroll-behavior:none;
+  -webkit-user-select:none;user-select:none;
+  -webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent;
+}
 /* Restored. These went out with the WebGL skin block by accident, and
    the damage was quiet: the canvas fell into normal flow, which pushed
    #app to 804 px inside an 800 px window, so the page could scroll by
    four pixels and the stacking context the HUD sits in was gone. */
 #app{position:fixed;inset:0;overflow:hidden}
-#gl{position:absolute;inset:0;display:block;width:100%;height:100%}
+#gl{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none}
+
+/* Touch targets. A tool button at 48px square is fine under a mouse and
+   too small under a thumb; the guideline everyone converged on is 44px,
+   and a range slider's thumb is the worst offender at 18. */
+@media (pointer:coarse){
+  .tool{width:60px;height:66px}
+  .menu button{padding:1.2em 1.25em}
+  .btn{padding:1.15em 1.7em}
+  input[type=range]{height:34px}
+  input[type=range]::-webkit-slider-thumb{width:26px;height:26px}
+  input[type=range]::-moz-range-thumb{width:26px;height:26px}
+  .glaze{padding:.8em .6em}
+  .seg button{padding:1em .2em}
+  #context{width:min(340px,42vw)}
+  #context.kiln{width:min(400px,46vw)}
+}
 #hud{position:relative;z-index:2}
 
 /* ============================================================
@@ -163,6 +190,15 @@ html,body{height:100%;overflow:hidden;background:#F4E7D2;}
   text-shadow:0 1px 0 #fff8;
 }
 #stage-hint b{color:var(--celadon-deep);font-weight:700}
+/* What the tool in your hand does. Sits under the stage hint, appears
+   only when a tool is selected, and is the one place in the game that
+   explains the difference between a rib and a needle. */
+#tool-tip{
+  display:none;margin-top:.5em;max-width:52ch;
+  font:600 12.5px/1.55 var(--sans);letter-spacing:.02em;
+  color:var(--celadon-deep);text-shadow:0 1px 0 #fff8;
+}
+#tool-tip.on{display:block}
 #ledger{display:flex;gap:1.6em;text-align:right}
 .led{display:flex;flex-direction:column;gap:.35em}
 .led-k{font:700 10px/1 var(--display);letter-spacing:.16em;color:var(--ink-dim)}
@@ -309,6 +345,36 @@ html,body{height:100%;overflow:hidden;background:#F4E7D2;}
   bottom:calc(var(--pad)*4.6);
   width:min(266px,24vw);
   overflow:auto;
+}
+/* With no gauges above it, the panel can start where they would have
+   been. Reserving that space regardless is what forced the kiln's
+   schedule — five sliders, a curve and a readout — into a third of the
+   height it needs, so the one screen in the game that is nothing but
+   controls arrived scrolled. */
+#hud.no-gauges #context{ top:22vh; }
+
+/* The kiln is a whole phase spent in this panel and nothing else, so it
+   gets the room to be read at a glance. */
+#context.kiln{ width:min(390px,34vw); }
+
+/* What a slider does, shown for the one you are touching.
+   Five permanent explanations is a wall of text that pushed the panel
+   back into scrolling — the very thing being fixed. One at a time costs
+   no height at rest and answers the question at the moment it is asked.
+   focus-within is what makes it work under a thumb, where there is no
+   hover: dragging a range input focuses it. */
+.slider-why{
+  display:none;margin:.35em 0 .1em;
+  font:600 11.5px/1.45 var(--sans);color:var(--ink-dim);
+}
+.slider-row:hover .slider-why,
+.slider-row:focus-within .slider-why,
+.slider-row.showing .slider-why{display:block}
+#context.kiln .slider-row{ margin:.55em 0; }
+#context.kiln .readout{ line-height:1.9; }
+@media (max-height:820px){
+  #context.kiln #curve{ height:74px; }
+  #context.kiln .slider-row{ margin:.42em 0; }
 }
 #context::-webkit-scrollbar{width:5px}
 #context::-webkit-scrollbar-thumb{background:#4A352428;border-radius:3px}

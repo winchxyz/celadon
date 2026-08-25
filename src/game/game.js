@@ -11,7 +11,7 @@ import { createPotMaterial, applyFireResult } from '../render/potMaterial.js';
 import { GlazeField, raycastPot } from '../sim/glazeField.js';
 import {
   GLAZES, GLAZE_BY_ID, SLOTS, defaultSchedule, fire as fireGlaze, fuelCost,
-  kilnCurve, scheduleHours, COOLING, meltPoint,
+  kilnCurve, scheduleHours, COOLING, meltPoint, maturePoint,
 } from '../sim/glaze.js';
 import { COMMISSIONS, FORMS, BODIES, rankFor, OPENING, CODEX, proceduralCommission, targetSize } from './lore.js';
 import { appraise, gradeFor, glazeName, liveRequirements } from './scoring.js';
@@ -171,6 +171,9 @@ export class Game {
 
     c.addEventListener('pointermove', (e) => {
       set(e);
+      if (e.pointerType === 'touch' && this._touches && this._touches.size) {
+        if (onTouchMove(e)) return;
+      }
       if (this.pointer.right) {
         // In the glaze room you do not walk around the pot — you turn
         // the pot, on a banding wheel, exactly as you would with a
@@ -192,13 +195,18 @@ export class Game {
           // coasted through nine more turns. You could not put a brush
           // anywhere near it.
           const dx = e.movementX ?? 0;
-          this.pot.rotation.y -= dx * BAND_RAD_PER_PX;
+          // Plus, not minus. The surface under your hand has to travel
+          // WITH your hand: drag right and the near face of the pot goes
+          // right, the way it would if you put a finger on a real one.
+          // It was inverted: a 200 px drag to the right moved the mark
+          // you were aiming at 0.31 of the screen to the LEFT.
+          this.pot.rotation.y += dx * BAND_RAD_PER_PX;
           // remember the last moments of the gesture, so the throw at
           // the end is the speed of the throw and not of the whole drag
           const now = performance.now();
           const gap = Math.max(1, now - (this._bandT ?? now));
           this._bandT = now;
-          const v = -dx * BAND_RAD_PER_PX / (gap / 1000);
+          const v = dx * BAND_RAD_PER_PX / (gap / 1000);
           this._bandV = clamp((this._bandV ?? 0) * 0.6 + v * 0.4, -BAND_MAX, BAND_MAX);
           this.eng.rig.orbit(0, e.movementY ?? 0);
         } else {
@@ -207,9 +215,98 @@ export class Game {
       }
     });
 
+    /* ---- touch ---------------------------------------------------
+     *
+     * An iPad has no right button and no scroll wheel, which is two of
+     * the three things this game is steered with. Pointer events already
+     * deliver a finger as a pointerdown, so shaping worked; orbiting,
+     * zooming and turning the pot on the banding wheel did not exist at
+     * all, and there was no way to get to them.
+     *
+     * One finger does what the left button does. Two fingers do what the
+     * right button and the wheel do: drag to orbit, pinch to zoom, and
+     * in the glaze room a sideways two-finger drag turns the pot. The
+     * second finger also takes back whatever the first one had started,
+     * because a gesture that begins as a shaping stroke and turns into
+     * an orbit must not leave a dent behind.
+     */
+    this._touches = new Map();
+
+    const touchGeometry = () => {
+      const pts = [...this._touches.values()];
+      if (pts.length < 2) return null;
+      const [a, b] = pts;
+      return {
+        cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2,
+        spread: Math.hypot(a.x - b.x, a.y - b.y),
+      };
+    };
+
+    const onTouchDown = (e) => {
+      this._touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this._touches.size === 2) {
+        // undo the press the first finger started
+        if (this.pointer.down) { this.pointer.down = false; this._onRelease(); }
+        this.undo?.();
+        this._pinch = touchGeometry();
+        this.pointer.right = true;
+        return true;
+      }
+      return this._touches.size > 2;
+    };
+
+    const onTouchMove = (e) => {
+      const prev = this._touches.get(e.pointerId);
+      if (!prev) return false;
+      this._touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this._touches.size < 2) return false;
+
+      const now = touchGeometry();
+      const was = this._pinch;
+      this._pinch = now;
+      if (!was || !now) return true;
+
+      // pinch: the change in spread is the zoom, in the same units the
+      // wheel hands over
+      const dSpread = now.spread - was.spread;
+      if (Math.abs(dSpread) > 0.5) this.eng.rig.zoom(-dSpread * 3.2);
+
+      const dx = now.cx - was.cx, dy = now.cy - was.cy;
+      if (this.state === ST.GLAZE) {
+        this.pot.rotation.y += dx * BAND_RAD_PER_PX;
+        this._bandV = clamp(dx * BAND_RAD_PER_PX * 22, -BAND_MAX, BAND_MAX);
+        this.eng.rig.orbit(0, dy);
+      } else {
+        this.eng.rig.orbit(dx, dy);
+      }
+      return true;
+    };
+
+    const onTouchUp = (e) => {
+      if (!this._touches.has(e.pointerId)) return false;
+      this._touches.delete(e.pointerId);
+      if (this._touches.size < 2) {
+        this._pinch = null;
+        if (this.pointer.right) {
+          this.pointer.right = false;
+          if (this.state === ST.GLAZE) {
+            this._band = Math.abs(this._bandV ?? 0) > 0.35 ? this._bandV : 0;
+            this._bandV = 0;
+          }
+        }
+        // lifting one of two fingers must not start shaping with the other
+        return true;
+      }
+      return true;
+    };
+
     c.addEventListener('pointerdown', (e) => {
       set(e);
       this.audio.resume();
+      if (e.pointerType === 'touch') {
+        try { c.setPointerCapture?.(e.pointerId); } catch { /* not fatal */ }
+        if (onTouchDown(e)) return;
+      }
       // Capturing the pointer is a nicety — it keeps a drag alive when the
       // cursor leaves the canvas — and it must never be able to take the
       // input with it. `?.` guards against the method being absent, not
@@ -224,6 +321,11 @@ export class Game {
     });
 
     const up = (e) => {
+      if (e && e.pointerType === 'touch') {
+        const wasMulti = this._touches.size > 1;
+        onTouchUp(e);
+        if (wasMulti) return;
+      }
       if (e && (e.button === 2 || e.button === 1)) {
         this.pointer.right = false;
         // let go mid-flick and the wheel carries on; let go having come
@@ -239,7 +341,10 @@ export class Game {
     };
     c.addEventListener('pointerup', up);
     c.addEventListener('pointercancel', up);
-    window.addEventListener('blur', () => { this.pointer.down = false; this.pointer.right = false; });
+    window.addEventListener('blur', () => {
+      this.pointer.down = false; this.pointer.right = false;
+      this._touches.clear(); this._pinch = null;
+    });
     c.addEventListener('contextmenu', (e) => e.preventDefault());
 
     c.addEventListener('wheel', (e) => {
@@ -252,7 +357,7 @@ export class Game {
         // the slow, exact turn you want when lining a brush up on a
         // spot: one notch, six degrees, no momentum.
         this._band = 0;
-        this.pot.rotation.y -= Math.sign(e.deltaY) * BAND_NOTCH;
+        this.pot.rotation.y += Math.sign(e.deltaY) * BAND_NOTCH;
       } else {
         this.setWheelSpeed(this.omegaTarget - Math.sign(e.deltaY) * 1.15);
       }
@@ -1692,7 +1797,20 @@ export class Game {
     this.hud.setKeyHints([
       ['DRAG', 'sliders'], ['RMB', 'orbit'], ['SCROLL', 'zoom'], ['ENTER', 'light it'],
     ]);
-    this.hud.kilnPanel(this.schedule, () => this.hud.updateKilnPanel(this.schedule, this.save.coin), null);
+    // The hottest glaze actually on the pot decides how hot this fire has
+    // to get, so the panel is told which one it is rather than leaving the
+    // player to know that a celadon wants 1272 °C.
+    const onPot = this.slots.filter(Boolean);
+    const needs = onPot.length
+      ? onPot.reduce((a, b) => (maturePoint(b) > maturePoint(a) ? b : a))
+      : null;
+    const need = needs ? { name: needs.name, temp: maturePoint(needs) } : null;
+    this.hud.kilnPanel(
+      this.schedule,
+      () => this.hud.updateKilnPanel(this.schedule, this.save.coin),
+      null,
+    );
+    this.hud.updateKilnPanel(this.schedule, this.save.coin, need);
 
     // carry the pot to the kiln
     this._moveTo = new THREE.Vector3(KILN_POS.x, this.studio.kilnShelfY, KILN_POS.z);

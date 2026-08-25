@@ -13,7 +13,8 @@
 //
 //  Run:  node src/dev/controls.mjs
 // ============================================================
-import { game, eng, step, DT } from './realgame.mjs';
+import * as THREE from 'three';
+import { game, eng, rig, step, DT } from './realgame.mjs';
 
 let bad = 0;
 const ok = (c, m) => { console.log(`   ${c ? 'ok  ' : 'FAIL'}  ${m}`); if (!c) bad++; };
@@ -50,6 +51,34 @@ const dragged = Math.abs(game.pot.rotation.y - before);
 console.log(`         a 400 px drag turns it ${deg(dragged).toFixed(0)}°`);
 ok(deg(dragged) > 90 && deg(dragged) < 200,
    `a 400 px drag is most of a half-turn, not a blur (${deg(dragged).toFixed(0)}°)`);
+
+/* ---- 1b. and it turns the way the hand goes ----------------------- */
+// Reported as "inverted", and it was: dragging right moved the mark you
+// were aiming at a third of the screen to the LEFT. What matters is not
+// the sign of a rotation but where a point on the near face ends up, so
+// that is what this measures: project a mark on the side of the pot
+// facing the camera, drag right, and require that it moves right.
+{
+  const nearAng = Math.atan2(eng.camera.position.x - game.pot.position.x,
+                             eng.camera.position.z - game.pot.position.z);
+  // The mark has to be the material point that is facing the camera NOW,
+  // not a fixed world angle: the pot has already been turned by the test
+  // above, and a point on the FAR side crosses the screen the other way.
+  game._band = 0;
+  const rot0 = game.pot.rotation.y;
+  const mat = nearAng - rot0;
+  const markX = (rot) => {
+    const a = mat + rot;
+    return new THREE.Vector3(8 * Math.sin(a), 8, 8 * Math.cos(a)).project(eng.camera).x;
+  };
+  const x0 = markX(rot0);
+  rightDown(); drag(200, 20); rightUp();
+  game._band = 0;
+  const x1 = markX(game.pot.rotation.y);
+  ok(x1 > x0,
+     `drag right and the near face of the pot goes right ` +
+     `(the mark crossed the screen ${x0.toFixed(2)} -> ${x1.toFixed(2)})`);
+}
 
 /* ---- 2. it scales with the distance, not the event count ---------- */
 game._band = 0;
@@ -99,5 +128,74 @@ ok(deg(notch) > 3 && deg(notch) < 12,
    `one scroll notch is a small exact step, good for placing a brush (${deg(notch).toFixed(1)}°)`);
 ok(game._band === 0, 'and it leaves no momentum behind');
 
-console.log(bad ? NL + `  ${bad} FAILED` + NL : NL + '  it can be aimed' + NL);
+/* ---- 6. and it can be played on a tablet -------------------------
+   An iPad has no right button and no scroll wheel, which is two of the
+   three things this game is steered with. One finger has to shape and
+   only shape; two fingers have to carry everything the right button and
+   the wheel used to. */
+const touch = (type, id, x, y) => canvas.dispatchEvent({
+  type, pointerId: id, pointerType: 'touch', button: 0,
+  clientX: x, clientY: y, movementX: 0, movementY: 0, preventDefault() {},
+});
+
+console.log(NL + '   on a tablet:' + NL);
+
+/* one finger shapes, and must not move the camera */
+game.startThrow(); step(60);
+{
+  const th = rig.goalTheta;
+  touch('pointerdown', 1, 700, 420);
+  const pressed = game.pointer.down;
+  for (let i = 0; i < 10; i++) touch('pointermove', 1, 700 + i * 8, 420);
+  touch('pointerup', 1, 780, 420);
+  ok(pressed, 'one finger presses the clay');
+  ok(Math.abs(rig.goalTheta - th) < 1e-6, 'and does not drag the camera with it');
+}
+
+/* two fingers orbit, and must not leave a dent in the pot */
+{
+  const th = rig.goalTheta, ph = rig.goalPhi;
+  touch('pointerdown', 1, 600, 400);
+  touch('pointerdown', 2, 800, 400);
+  for (let i = 0; i < 20; i++) {
+    touch('pointermove', 1, 600 + i * 8, 400 + i * 3);
+    touch('pointermove', 2, 800 + i * 8, 400 + i * 3);
+  }
+  const orbited = Math.abs(rig.goalTheta - th) > 1e-3 && Math.abs(rig.goalPhi - ph) > 1e-3;
+  const clean = !game.pointer.down;
+  touch('pointerup', 1, 760, 460); touch('pointerup', 2, 960, 460);
+  ok(orbited, 'two fingers orbit the camera');
+  ok(clean, 'and the finger that started as a press is taken off the clay');
+}
+
+/* pinch zooms */
+{
+  const r0 = rig.goalRadius;
+  touch('pointerdown', 1, 600, 400); touch('pointerdown', 2, 800, 400);
+  for (let i = 0; i < 15; i++) {
+    touch('pointermove', 1, 600 - i * 6, 400);
+    touch('pointermove', 2, 800 + i * 6, 400);
+  }
+  const r1 = rig.goalRadius;
+  touch('pointerup', 1, 510, 400); touch('pointerup', 2, 890, 400);
+  ok(r1 < r0 - 0.5, `pinching out moves the camera in (${r0.toFixed(1)} -> ${r1.toFixed(1)})`);
+}
+
+/* and in the glaze room two fingers turn the pot instead of orbiting */
+game.startGlaze(); step(30);
+{
+  game._band = 0;
+  const before = game.pot.rotation.y;
+  touch('pointerdown', 1, 600, 400); touch('pointerdown', 2, 800, 400);
+  for (let i = 0; i < 20; i++) {
+    touch('pointermove', 1, 600 + i * 10, 400);
+    touch('pointermove', 2, 800 + i * 10, 400);
+  }
+  const turned = Math.abs(game.pot.rotation.y - before);
+  touch('pointerup', 1, 800, 400); touch('pointerup', 2, 1000, 400);
+  ok(deg(turned) > 20, `a two-finger drag turns the pot (${deg(turned).toFixed(0)}°)`);
+  ok(!game.pointer.right, 'and lifting both fingers ends the gesture');
+}
+
+console.log(bad ? NL + `  ${bad} FAILED` + NL : NL + '  it can be aimed, with a mouse or a thumb' + NL);
 process.exit(bad ? 1 : 0);

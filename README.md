@@ -21,7 +21,7 @@
 
 <p>
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-3F9C81?style=flat-square"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-16%20passing-3F9C81?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-17%20passing-3F9C81?style=flat-square">
   <img alt="Art assets" src="https://img.shields.io/badge/art%20assets-0-3F9C81?style=flat-square">
   <img alt="Dependencies" src="https://img.shields.io/badge/runtime%20deps-1-3F9C81?style=flat-square">
   <img alt="Sound" src="https://img.shields.io/badge/sound-CC0-3F9C81?style=flat-square">
@@ -66,7 +66,7 @@ nine small CC0 sound recordings — about 140 kB — and it runs without them.
 
 It is already running at **[winchxyz.github.io/celadon](https://winchxyz.github.io/celadon/)** —
 no install, nothing to download. Every push to `master` rebuilds it, and the
-sixteen benches have to pass before it deploys.
+seventeen benches have to pass before it deploys.
 
 To run it locally:
 
@@ -77,7 +77,7 @@ npm run dev      # http://localhost:5180
 
 ```bash
 npm run build && npm run preview   # production bundle
-npm test                           # sixteen headless benches, ~5 s
+npm test                           # seventeen headless benches, ~5 s
 ```
 
 **Requirements:** a browser with WebGL2 and hardware acceleration — recent
@@ -126,6 +126,7 @@ next.
 
 | | |
 |---|---|
+| **Drag** | shape the clay — the only thing your hand ever does to the pot |
 | **Right-drag** | orbit — except in the glaze room, where it turns the pot on its banding wheel |
 | **Scroll** | wheel speed at the wheel · a six-degree nudge in the glaze room · zoom with **Shift** |
 | **Ctrl+Z** | take back the last few seconds — use it freely |
@@ -133,6 +134,13 @@ next.
 | **Space** | water · **W** / **S** wheel speed |
 | **Tab** | stress view · **G** target ghost |
 | **Enter** | next stage · **Esc** menu |
+
+On a tablet there is no right button and no scroll wheel, which is two of the
+three things the game is steered with. So the fingers split the job: **one
+finger only ever touches the clay**, and **two fingers** carry everything else
+— drag them to orbit, pinch to zoom, and in the glaze room turn the pot on its
+banding wheel. Holding a tool shows what it does in the line under the stage
+name, and every kiln slider explains itself when you touch it.
 
 With the assist on — which it is by default — the wheel is already turning
 when you sit down, the clay dries slowly, and a pot that is getting away from
@@ -339,7 +347,7 @@ Most of what makes this game hard to get right is in the simulation, not the
 renderer, so nearly all of it can be tested headlessly.
 
 ```bash
-npm test          # all sixteen, about five seconds
+npm test          # all seventeen, about five seconds
 ```
 
 They fall into four groups.
@@ -376,6 +384,7 @@ simulation bench can pass while the game itself misbehaves. For a while one did.
 | `seam` | the procedural tiles actually close, so no grid is ruled across the floor |
 | `contrast` | every ink that colours type is readable on a cream plate, checked per CSS rule, with a lower bar granted only to `::before` glyphs |
 | `heat` | the two blackbody curves — one in JavaScript lighting the kiln, one in GLSL glowing the pot inside it — still agree across 400–1400 °C |
+| `encoding` | every file is still clean UTF-8, and the characters the interface is drawn with are still in it. A shell that reads UTF-8 as ANSI once wrote three files back double-encoded, and a terminal shows the damaged file and the healthy one identically — so this reads bytes |
 
 **Does the money work?**
 

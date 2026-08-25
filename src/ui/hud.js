@@ -39,22 +39,22 @@ const TOOLSETS = {
   // way you drag, exactly as it would at a real wheel — there is nothing
   // to select and nothing to get wrong before you have even touched it.
   throw: [
-    { id: 'hands', key: '1', label: 'HANDS', icon: 'hands' },
-    { id: 'rib', key: '2', label: 'RIB', icon: 'rib' },
-    { id: 'water', key: '3', label: 'WATER', icon: 'water' },
-    { id: 'needle', key: '4', label: 'LEVEL RIM', icon: 'needle' },
+    { id: 'hands', key: '1', label: 'HANDS', icon: 'hands', tip: 'Shapes the wall. Drag up to lift and thin it, down to press it back, out to belly it, in to collar it.' },
+    { id: 'rib', key: '2', label: 'RIB', icon: 'rib', tip: 'Smooths and trues the wall without moving clay. Takes the throwing rings down and the wobble out.' },
+    { id: 'water', key: '3', label: 'WATER', icon: 'water', tip: 'Wets the clay so it moves again. Too wet and it slumps; SPACE does the same thing.' },
+    { id: 'needle', key: '4', label: 'LEVEL RIM', icon: 'needle', tip: 'Cuts the rim level in one click. Use it when the top has gone uneven.' },
   ],
   trim: [
-    { id: 'trim', key: '1', label: 'TURN', icon: 'trim' },
-    { id: 'rib', key: '2', label: 'BURNISH', icon: 'rib' },
+    { id: 'trim', key: '1', label: 'TURN', icon: 'trim', tip: 'Cuts away the surplus underneath and leaves a clean ring for the pot to stand on.' },
+    { id: 'rib', key: '2', label: 'BURNISH', icon: 'rib', tip: 'Polishes the leather-hard surface. Compacts it and closes the pores.' },
   ],
   glaze: [
-    { id: 'dip', key: '1', label: 'DIP', icon: 'dip' },
-    { id: 'pour', key: '2', label: 'POUR', icon: 'pour' },
-    { id: 'brush', key: '3', label: 'BRUSH', icon: 'brush' },
-    { id: 'spray', key: '4', label: 'SPRAY', icon: 'spray' },
-    { id: 'wax', key: '5', label: 'WAX', icon: 'wax' },
-    { id: 'wipe', key: '6', label: 'WIPE FOOT', icon: 'sponge' },
+    { id: 'dip', key: '1', label: 'DIP', icon: 'dip', tip: 'The evenest coat there is. Set the line with the mouse, click to lower the pot in.' },
+    { id: 'pour', key: '2', label: 'POUR', icon: 'pour', tip: 'Runs glaze down from where you hold it. Thick where it starts, thin where it ends.' },
+    { id: 'brush', key: '3', label: 'BRUSH', icon: 'brush', tip: 'Paints exactly where you drag. Slow, and the only way to put a mark somewhere on purpose.' },
+    { id: 'spray', key: '4', label: 'SPRAY', icon: 'spray', tip: 'A soft, thin, even coat. Good for shading one glaze into another.' },
+    { id: 'wax', key: '5', label: 'WAX', icon: 'wax', tip: 'Resist. Glaze will not stick where you paint this, so it stays bare clay.' },
+    { id: 'wipe', key: '6', label: 'WIPE FOOT', icon: 'sponge', tip: 'Cleans glaze off the foot. Leave it on and the pot welds itself to the kiln shelf.' },
   ],
 };
 
@@ -122,7 +122,39 @@ export class HUD {
   }
 
   setKeyHints(pairs) {
-    $('#keyhints').innerHTML = pairs.map(([k, v]) => `<b>${k}</b> ${v}`).join('   ·   ');
+    // On a tablet, half of these name hardware that is not there. The
+    // gestures do the same jobs, so the same line says them in the words
+    // that apply: nobody with an iPad needs to be told about SHIFT.
+    const touch = matchMedia('(pointer:coarse)').matches;
+    const TOUCH = {
+      'RMB': ['TWO FINGERS', 'orbit'],
+      'RMB drag': ['TWO FINGERS', 'turn the pot'],
+      'SCROLL': ['PINCH', 'zoom'],
+      'SHIFT+SCROLL': null,
+      'LMB': ['TAP', 'apply'],
+      'DRAG': ['DRAG', null],
+      'CTRL+Z': null,
+      'TAB': null,
+      'SPACE': null,
+      '1-4': ['TAP', 'a tool'],
+      '1-6': ['TAP', 'a tool'],
+      'ENTER': null,
+    };
+    const shown = touch
+      ? pairs.map(([k, v]) => {
+        if (!(k in TOUCH)) return [k, v];
+        const t = TOUCH[k];
+        return t === null ? null : [t[0], t[1] ?? v];
+      }).filter(Boolean)
+      : pairs;
+    // the same verb twice in a row reads as a stutter
+    const seen = new Set();
+    const uniq = shown.filter(([k, v]) => {
+      const key = k + '|' + v;
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    });
+    $('#keyhints').innerHTML = uniq.map(([k, v]) => `<b>${k}</b> ${v}`).join('   ·   ');
   }
 
   setAdvance(label, enabled = true) {
@@ -166,7 +198,14 @@ export class HUD {
     $('#v-m').textContent = Math.round(mass);
   }
 
-  showGauges(on) { $('#gauges').classList.toggle('hidden', !on); }
+  showGauges(on) {
+    $('#gauges').classList.toggle('hidden', !on);
+    // The context panel below sits 250px down to clear the gauges. When
+    // the gauges are not there - the glaze room and the kiln - that is
+    // 250px of reserved emptiness, and it was pushing the kiln schedule
+    // off the bottom of the screen and making it scroll.
+    $('#hud').classList.toggle('no-gauges', !on);
+  }
 
   /* ---------------- toolbar ---------------- */
 
@@ -184,6 +223,8 @@ export class HUD {
         `<svg viewBox="0 0 24 24">${ICONS[t.icon] ?? ''}</svg>` +
         `<span class="tl">${t.label}</span>`;
       b.dataset.tool = t.id;
+      b.dataset.tip = t.tip ?? '';
+      if (t.tip) b.title = t.tip;
       if (disabledFn && disabledFn(t.id)) b.disabled = true;
       b.addEventListener('click', () => this.game.selectTool(t.id));
       this.toolbar.appendChild(b);
@@ -193,7 +234,25 @@ export class HUD {
 
   selectTool(id) {
     this.tool = id;
-    for (const b of this.toolbar.children) b.classList.toggle('sel', b.dataset.tool === id);
+    let tip = '';
+    for (const b of this.toolbar.children) {
+      const on = b.dataset.tool === id;
+      b.classList.toggle('sel', on);
+      if (on) tip = b.dataset.tip || '';
+    }
+    // Say what the thing in your hand does. A row of icons with one-word
+    // labels tells you a rib exists; it does not tell you that a rib
+    // trues a wall without moving any clay, and there was nowhere in the
+    // game that did.
+    this.setToolTip(tip);
+  }
+
+  /** The line under the stage title that names what the current tool does. */
+  setToolTip(text) {
+    const e = $('#tool-tip');
+    if (!e) return;
+    e.innerHTML = text || '';
+    e.classList.toggle('on', !!text);
   }
 
   toolKeys() {
@@ -320,13 +379,13 @@ export class HUD {
     g.textAlign = 'left';
     g.fillText(`${cH.toFixed(1)} cm`, 6, 14);
     g.textAlign = 'right';
-    g.fillText(`Ø ${cD.toFixed(1)}`, W - 6, 14);
+    g.fillText(`⌀ ${cD.toFixed(1)}`, W - 6, 14);
     if (form) {
       g.fillStyle = 'rgba(125,98,73,0.85)';
       g.textAlign = 'left';
       g.fillText(`${tH.toFixed(0)}`, 6, 27);
       g.textAlign = 'right';
-      g.fillText(`Ø ${tD.toFixed(0)}`, W - 6, 27);
+      g.fillText(`⌀ ${tD.toFixed(0)}`, W - 6, 27);
     }
   }
 
@@ -337,6 +396,7 @@ export class HUD {
   glazePanel(state, onPick, onThick) {
     const c = this.context;
     c.classList.remove('hidden');
+    c.classList.remove('kiln');   // the wide schedule layout is the kiln's alone
     c.innerHTML = '';
     c.appendChild(el('div', 'panel-h', '<span class="glyph">◍</span> GLAZE BUCKETS'));
 
@@ -377,10 +437,11 @@ export class HUD {
   }
 
   kilnPanel(sched, onChange, fireNow) {
+    this.context.classList.add('kiln');
     const c = this.context;
     c.classList.remove('hidden');
     c.innerHTML = '';
-    c.appendChild(el('div', 'panel-h', '<span class="glyph">▲</span> FIRING SCHEDULE'));
+    c.appendChild(el('div', 'panel-h', '<span class="glyph">◍</span> FIRING SCHEDULE'));
 
     const canvas = el('canvas');
     canvas.id = 'curve';
@@ -388,7 +449,7 @@ export class HUD {
     c.appendChild(canvas);
     this.curveCanvas = canvas;
 
-    const slider = (key, label, min, max, step, fmtFn) => {
+    const slider = (key, label, min, max, step, fmtFn, why) => {
       const row = el('div', 'slider-row');
       row.innerHTML = `<label>${label} <span data-v="${key}">${fmtFn(sched[key])}</span></label>`;
       const inp = el('input');
@@ -399,17 +460,35 @@ export class HUD {
         row.querySelector(`[data-v="${key}"]`).textContent = fmtFn(sched[key]);
         onChange();
       });
+      // Hover and focus alone are not enough. A tablet has no hover, and
+      // a tap on a range input does not reliably focus it — so the one
+      // explanation a touch player could reach would never open. Touching
+      // the row is the signal that always arrives.
+      const reveal = () => {
+        for (const r of c.querySelectorAll('.slider-row.showing')) r.classList.remove('showing');
+        row.classList.add('showing');
+      };
+      row.addEventListener('pointerdown', reveal);
+      inp.addEventListener('input', reveal);
       row.appendChild(inp);
+      // Every one of these is a decision with a consequence, and the
+      // panel used to be five bare numbers with no explanation anywhere
+      // in the game of what any of them would do to the pot.
+      if (why) { const h = el('div', 'slider-why', why); row.appendChild(h); row.title = why; }
       c.appendChild(row);
       return inp;
     };
 
-    slider('peak', 'Peak', 900, 1330, 5, (v) => `${Math.round(v)}°C`);
-    slider('ramp', 'Ramp', 40, 320, 5, (v) => `${Math.round(v)}°/hr`);
-    slider('soak', 'Soak', 0, 3, 0.1, (v) => `${fmt(v, 1)} hr`);
-    slider('reduction', 'Reduction', 0, 1, 0.02, (v) => `${pct(v)}%`);
-    slider('reduceFrom', 'Damper at', 820, 1150, 10, (v) => `${Math.round(v)}°C`);
-
+    slider('peak', 'Peak', 900, 1330, 5, (v) => `${Math.round(v)}°C`,
+      'How hot it gets. This is the one that decides everything: a glaze below its own maturing temperature comes out a dry scab.');
+    slider('ramp', 'Ramp', 40, 320, 5, (v) => `${Math.round(v)}°/hr`,
+      'How fast it climbs. Too fast for the thickness of the wall and the piece comes apart on the way up.');
+    slider('soak', 'Soak', 0, 3, 0.1, (v) => `${fmt(v, 1)} hr`,
+      'How long it sits at the top. This is how far the glaze gets to move and level itself out.');
+    slider('reduction', 'Reduction', 0, 1, 0.02, (v) => `${pct(v)}%`,
+      'How far the air is starved. This is what turns copper red and iron green: no reduction, no celadon.');
+    slider('reduceFrom', 'Damper at', 820, 1150, 10, (v) => `${Math.round(v)}°C`,
+      'When the damper shuts. Too early and the body has not finished burning out; too late and the colour never comes.');
     const seg = el('div', 'seg');
     for (const k of ['crash', 'normal', 'slow']) {
       const b = el('button', sched.cooling === k ? 'sel' : '', COOLING[k].name);
@@ -454,12 +533,25 @@ export class HUD {
     this.updateKilnPanel(sched);
   }
 
-  updateKilnPanel(sched, coin) {
+  updateKilnPanel(sched, coin, needs) {
     if (!this.curveCanvas) return;
     const cost = fuelCost(sched);
     const hrs = scheduleHours(sched);
+    if (needs !== undefined) this._kilnNeeds = needs;
+    const need = this._kilnNeeds;
     if (this.kilnReadout) {
+      // The most useful sentence in the room, and it was nowhere: the
+      // temperature the glaze on THIS pot needs. Taking a 1272 °C celadon
+      // to 1100 is the commonest way to waste a firing, and nothing said
+      // so before, during or after it.
+      const verdict = !need ? ''
+        : sched.peak < need.temp
+          ? `<span class="k">GLAZE</span> <span class="hot">${need.name} needs ` +
+            `${Math.round(need.temp)}°C — this stops ${Math.round(need.temp - sched.peak)}° short</span><br>`
+          : `<span class="k">GLAZE</span> ${need.name} melts at ` +
+            `${Math.round(need.temp)}°C — hot enough<br>`;
       this.kilnReadout.innerHTML =
+        verdict +
         `<span class="k">FIRING</span> ${fmt(hrs, 1)} hr<br>` +
         `<span class="k">FUEL</span> <span class="${coin != null && cost > coin ? 'hot' : ''}">${cost} ash-marks</span><br>` +
         `<span class="k">ATMOSPHERE</span> ${sched.reduction < 0.2 ? 'oxidising' : sched.reduction < 0.55 ? 'neutral' : 'reducing'}`;
