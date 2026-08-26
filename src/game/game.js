@@ -474,9 +474,26 @@ export class Game {
     const k = e.key;
 
     if (this.hud.overlayOpen) {
-      if (k === 'Escape' || k === 'Enter') {
+      /* Enter takes the primary action. Escape does NOT.
+         They were the same key here, and the primary action on the
+         confirmation that wipes the save is the button marked "Break
+         it" — so Escape, which means cancel on every dialog anybody has
+         ever used, erased the shelf, the codex, the standing and the
+         ash-marks. Escape now takes the way out: the first button that
+         is not the primary one, which is "No" on that dialog and
+         "Back" on every panel. Where there is only a primary button —
+         an overlay that just wants acknowledging — it still closes on
+         Escape, because there the primary IS the way out. */
+      if (k === 'Enter') {
         const b = this.hud.ovInner.querySelector('.btn.primary');
         if (b) { b.click(); e.preventDefault(); }
+        return;
+      }
+      if (k === 'Escape') {
+        const btns = [...this.hud.ovInner.querySelectorAll('.btn')];
+        const out = btns.find((b) => !b.classList.contains('primary')) ?? (btns.length === 1 ? btns[0] : null);
+        if (out) { out.click(); e.preventDefault(); }
+        return;
       }
       return;
     }

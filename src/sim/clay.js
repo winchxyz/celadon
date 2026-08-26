@@ -1155,7 +1155,19 @@ export class Clay {
     if (isWet) {
       const forgiving = ambient.forgiving === true;
       this.tooTall = this.height > MAX_H * (forgiving ? 0.92 : 1);
-      if (collapse > (forgiving ? 1.7 : 0.9)) {
+      /* A RATE, not a per-frame total.
+         `collapse` is summed over the sections as `over * dt`, so it
+         scales with the length of the frame and the threshold did not:
+         the same pot, in the same state, is destroyed on a machine
+         having a bad moment and survives on one that is not. With
+         fifty sections over yield at about 1.0 each, the sum is 0.83
+         at 60fps and 1.67 at 30 — under the old limit and over it,
+         decided by the frame rate alone.
+         Dividing by dt gives the quantity the test was always meant to
+         be about, and the limits are the old ones restated at 60fps
+         (0.9 x 60 = 54, 1.7 x 60 = 102), so a pot that used to die
+         still dies and one that used to live still lives. */
+      if (dt > 1e-6 && collapse / dt > (forgiving ? 102 : 54)) {
         this.kill('The wall let go. The whole thing came down in a spiral.');
       }
       let torn = 0;

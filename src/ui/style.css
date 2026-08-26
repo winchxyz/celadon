@@ -107,10 +107,21 @@ html,body{
      colour of the shed, instead of a white one. */
   background:#2b3a3a;
   /* On a tablet every one of these is the browser taking a gesture the
-     game needs. Without touch-action a finger on the clay scrolls the
-     page instead of pulling the wall; without the rest, a press-and-hold
-     on the pot raises a selection menu over it. */
-  touch-action:none;
+     game needs: without them, a press-and-hold on the pot raises a
+     selection menu over it and a drag bounces the page.
+
+     touch-action is NOT among them any more, and it used to be. The
+     effective touch-action for a touch is intersected all the way up
+     the ancestors, so `none` on the body meant none for everything
+     inside it — the kiln schedule, the codex, the gallery and the
+     glaze shelf could not be scrolled with a finger at all, which on a
+     tablet is the same as their lower half not existing. It also was
+     not doing the job it was there for: #gl carries its own
+     touch-action:none, so the canvas, which is the only surface where
+     a stray pan would actually cost the player anything, was already
+     covered. The page itself cannot scroll — html and body are
+     height:100% with overflow:hidden — so there is nothing for a pan
+     outside the canvas to run away with. */
   overscroll-behavior:none;
   -webkit-user-select:none;user-select:none;
   -webkit-touch-callout:none;
