@@ -543,7 +543,15 @@ export class Game {
     if (k === ']' || k === 'w' || k === 'W') this.setWheelSpeed(this.omegaTarget + 1.6);
   }
 
-  setWheelSpeed(v) {
+  setWheelSpeed(v, byPlayer = true) {
+    /* A hand on the control takes the control.
+       The assist damps omegaTarget toward its own idea of the right
+       speed every frame at 2.2/s, so 89% of anything the player set
+       was gone within a second — while the toast that introduces it
+       says "W and S to take it over" in as many words. Either the
+       message or the behaviour had to change, and the message was the
+       one telling the truth about what a wheel is for. */
+    if (byPlayer) this._wheelManual = true;
     this.omegaTarget = clamp(v, 0, (MAX_RPM * TAU) / 60);
   }
 
@@ -1226,6 +1234,7 @@ export class Game {
     // In assist the wheel is already turning when you sit down: a stopped
     // wheel is the single most common reason a first-timer presses on the
     // clay and nothing at all happens.
+    this._wheelManual = false;   // a new pot hands the wheel back to the assist
     this.omegaTarget = assist ? 8.4 : 0;
     this.omega = assist ? 6.0 : 0;
 
@@ -1434,9 +1443,9 @@ export class Game {
     // speed is what throws a wide form off the wheel head. Held at one
     // speed, widening fed on itself: wider means more centrifugal load
     // means it slumps wider still, and a bowl ran away into a pancake.
-    if (assist && tId === 'hands') {
+    if (assist && tId === 'hands' && !this._wheelManual) {
       const want = clamp(40 / Math.max(4.2, c.maxR), 3.0, 8.6);
-      this.setWheelSpeed(damp(this.omegaTarget, want, 2.2, dt));
+      this.setWheelSpeed(damp(this.omegaTarget, want, 2.2, dt), false);
       if (pressing && !this._toldWheel) {
         this._toldWheel = true;
         this.hud.toast('The wheel finds its own speed, slowing as the pot opens out. <b>W</b> and <b>S</b> to take it over.', '', 5200);
@@ -2549,10 +2558,17 @@ export class Game {
     if (r.destroyed) s.stats.destroyed++;
     else s.stats.sold++;
 
+    /* Cleared for EVERY result, not only the accepted ones.
+       It was reset inside the acceptance branch, so a rejected piece
+       left the previous commission's rewards standing — and the results
+       card reads this list to draw "New in the shed". Fail a job and it
+       congratulated you again on the glaze you were given for the one
+       before, on the screen that had just told you the piece was
+       refused. */
+    this._newUnlocks = [];
     if (r.accepted && !this.commission.procedural) {
       s.commission = Math.max(s.commission, COMMISSIONS.indexOf(this.commission) + 1);
       const un = this.commission.unlocks;
-      this._newUnlocks = [];
       if (un) {
         if (un.glaze && SaveIO.unlock(s, 'glaze', un.glaze)) this._newUnlocks.push(GLAZE_BY_ID[un.glaze]?.name);
         if (un.body && SaveIO.unlock(s, 'body', un.body)) this._newUnlocks.push(BODIES.find((b) => b.id === un.body)?.name);
