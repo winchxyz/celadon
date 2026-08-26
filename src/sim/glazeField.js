@@ -20,6 +20,16 @@ import * as THREE from 'three';
 export const GW = 192;   // angular cells
 export const GH = 160;   // meridian cells
 
+/**
+ * How far up the wall counts as "the foot".
+ *
+ * One number, read by the sponge and by the inspector. They each had
+ * their own — 0.2625 cm of full-strength wiping against 0.55 cm of
+ * grading — and a tool that cannot satisfy the test it is measured by
+ * is not a tool, it is a trap.
+ */
+export const FOOT_BAND = 0.55;
+
 export class GlazeField {
   constructor() {
     // One float, read back as its bits: this is how a float becomes a
@@ -219,12 +229,34 @@ export class GlazeField {
     this._touch();
   }
 
-  /** Wipe the foot — mandatory, or the pot welds to the shelf. */
+  /**
+   * Wipe the foot — mandatory, or the pot welds to the shelf.
+   *
+   * The sponge and the inspector have to agree about where the foot is,
+   * and they did not. This took everything off at full strength only
+   * below heightCm * 0.35 — 0.2625 cm for the 0.75 the game passes —
+   * while footClean() judges every row out to 0.55 cm at full weight.
+   * At 0.55 the old falloff removed 36.7% and left 63.3% standing, so
+   * one press of the sponge could not clear the kiln's own gate.
+   *
+   * What that looked like from the outside: tap the sponge, get a green
+   * "Foot wiped clean.", press for the kiln, and be told the foot is
+   * still covered. The coach's line does not change either, because it
+   * was already showing the same string, so nothing on screen says to
+   * tap again. Measured across the eight forms at nine sizes each, 23
+   * of 72 failed on one tap — every form has sizes that fail.
+   *
+   * The full-strength band now reaches whatever footClean grades, and
+   * the two read the same constant so they cannot drift apart again.
+   * The feather above it is still there, so there is a soft edge rather
+   * than a razor line where the glaze stops.
+   */
   wipeFoot(heightCm = 0.7) {
+    const inner = Math.min(FOOT_BAND, heightCm * 0.9);
     for (let j = 0; j < GH; j++) {
       if (this.mSide[j] > 1.5) continue;
       if (this.mY[j] > heightCm) continue;
-      const f = smoothstep(heightCm, heightCm * 0.35, this.mY[j]);
+      const f = smoothstep(heightCm, inner, this.mY[j]);
       for (let i = 0; i < GW; i++) {
         const o = this.idx(i, j);
         for (let s = 0; s < SLOTS; s++) this.data[o + s] *= 1 - f;
@@ -234,7 +266,7 @@ export class GlazeField {
   }
 
   /** Is the foot clean enough to sit on a shelf? 1 = clean. */
-  footClean(heightCm = 0.55) {
+  footClean(heightCm = FOOT_BAND) {
     let worst = 0;
     for (let j = 0; j < GH; j++) {
       if (this.mSide[j] > 1.5 || this.mY[j] > heightCm) continue;

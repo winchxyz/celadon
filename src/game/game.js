@@ -2196,8 +2196,18 @@ export class Game {
     if (tool === 'wipe') {
       this.field.wipeFoot(0.75);
       this.field.upload();
+      /* Say what happened, do not assert it.
+         This announced "Foot wiped clean." in green whatever the state
+         of the foot, and for a long time that was simply untrue — the
+         sponge could not reach what the kiln inspects, so the player
+         was congratulated and then refused. The band is fixed now, but
+         a tool reporting its own success without looking is how that
+         went unnoticed for so long, so it looks. */
       this.audio.click(0.7, 0.14);
-      this.hud.toast('Foot wiped clean.', 'good', 1800);
+      const fc = this.field.footClean();
+      if (fc > 0.92) this.hud.toast('Foot wiped clean.', 'good', 1800);
+      else if (fc > 0.4) this.hud.toast('Foot mostly clean — go round it again.', '', 2400);
+      else this.hud.toast('Still glaze on the foot. Wipe it again.', 'hot', 2600);
     }
   }
 
