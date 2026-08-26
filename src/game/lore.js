@@ -462,22 +462,6 @@ export const COMMISSIONS = [
     },
   },
   {
-    id: 'c11',
-    title: 'Taken Out Alive',
-    from: 'Nobody. This one is not a commission.',
-    pay: 300, rep: 260,
-    text:
-      'The raku firing is not a Guild technique and it is not permitted. You open the kiln at nine hundred ' +
-      'and take the pot out while it is still moving, and bury it in straw, and it either survives or it does not.',
-    require: { form: 'chawan', glaze: 'raku', effect: 'metal', maxPeak: 1010 },
-    unlocks: { glaze: 'kaki' },
-    lore: {
-      h: 'Why it is forbidden',
-      p: '"Not because it is dangerous. Because it cannot be repeated. The Guild exists to make the fire ' +
-        'predictable, and a raku pot is a confession that it never was."',
-    },
-  },
-  {
     id: 'c7b',
     title: 'Grey Throws No Light',
     from: 'Perrin Rill, lampwright, who begrudges every wick',
@@ -496,6 +480,22 @@ export const COMMISSIONS = [
         'almost nothing else, which is why the ash of a field makes a white glaze and the ash ' +
         'of a forest makes a green one. There is no white in it anywhere. There is only ' +
         'silica that never finished dissolving."',
+    },
+  },
+  {
+    id: 'c11',
+    title: 'Taken Out Alive',
+    from: 'Nobody. This one is not a commission.',
+    pay: 300, rep: 260,
+    text:
+      'The raku firing is not a Guild technique and it is not permitted. You open the kiln at nine hundred ' +
+      'and take the pot out while it is still moving, and bury it in straw, and it either survives or it does not.',
+    require: { form: 'chawan', glaze: 'raku', effect: 'metal', maxPeak: 1010 },
+    unlocks: { glaze: 'kaki' },
+    lore: {
+      h: 'Why it is forbidden',
+      p: '"Not because it is dangerous. Because it cannot be repeated. The Guild exists to make the fire ' +
+        'predictable, and a raku pot is a confession that it never was."',
     },
   },
   {
