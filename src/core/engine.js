@@ -395,6 +395,56 @@ export class Engine {
 
     composer.addPass(new RenderPass(scene, camera));
 
+    /* Nothing non-finite gets past here.
+       The buffer the scene is drawn into is half float, and three turns
+       tone mapping OFF when it draws into a render target, so what lands
+       there is raw linear radiance with a ceiling of 65504. A mirror-
+       bright specular highlight overshot that ceiling and wrote +Inf,
+       and the bloom that comes next is an amplifier: its five mips reach
+       over a thousand pixels in every direction and composite
+       ADDITIVELY, so one bad texel became the whole frame. Out the far
+       end came a non-finite value, and on Apple silicon that lands as
+       either black or white depending on how it rounds — which is why
+       both were reported, alternating, from the same fault.
+       The highlight itself is fixed at its source. This is the guard
+       that means no future light, glaze or emissive can do it again: it
+       costs one full-screen pass, and it makes the whole chain downstream
+       arithmetically safe by construction rather than by audit. */
+    composer.addPass(new ShaderPass({
+      uniforms: { tDiffuse: { value: null } },
+      vertexShader: /* glsl */`
+varying vec2 vUv;
+void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }
+`,
+      fragmentShader: /* glsl */`
+uniform sampler2D tDiffuse;
+varying vec2 vUv;
+void main(){
+  vec4 t = texture2D(tDiffuse, vUv);
+  // a NaN fails every comparison, so testing NOT (x >= 0.0) catches what
+  // a clamp would pass straight through
+  vec3 c = vec3(
+    !(t.r >= 0.0) ? 0.0 : t.r,
+    !(t.g >= 0.0) ? 0.0 : t.g,
+    !(t.b >= 0.0) ? 0.0 : t.b);
+  /* And a ceiling low enough that the bloom cannot be detonated.
+     An infinity was only the extreme case. A perfectly legitimate
+     specular highlight — roughness 0.05 under the kiln light, which is
+     an irradiance of 36 — computes to a radiance of 18,324. That is a
+     finite, correct number, and it is eighteen thousand times the
+     bloom's threshold of 1.02. Fed that, five mips of Gaussian reaching
+     a thousand pixels in every direction and composited additively will
+     whiten most of the frame, with no non-finite value involved at all.
+     That is the white flash.
+     Twelve is chosen from the other end of the chain: after exposure and
+     NeutralToneMapping anything above about four is already solid white,
+     so nothing above this can be told apart in the finished picture —
+     but the bloom can tell the difference very loudly indeed. */
+  gl_FragColor = vec4(min(c, vec3(12.0)), t.a);
+}
+`,
+    }));
+
     if (this.quality === 'high') {
       // Ambient occlusion at radius 1.9 and blend 0.85 packs a dark
       // ring into every crease and contact point. That is a rendering
