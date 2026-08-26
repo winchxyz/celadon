@@ -204,12 +204,28 @@ export class CameraRig {
 
   zoom(dz) {
     if (this.lock) return;
+    /* A hand on the camera takes the camera. Anything that re-frames
+       automatically checks this and leaves the distance alone once it
+       is set; whoever set the automatic framing up clears it again when
+       the subject changes. */
+    this.zoomed = true;
     this.goalRadius = clamp(this.goalRadius * (1 + dz * 0.0014), this.minR, this.maxR);
   }
 
   frame(target, radius, phi = null, theta = null, snap = false) {
     this.goalTarget.copy(target);
-    this.goalRadius = clamp(radius, this.minR, this.maxR);
+    /* null means "leave the distance alone", exactly as it already does
+       for phi and theta. The throwing room re-frames the camera every
+       frame to keep a growing pot in shot, which is a good default and
+       was also an absolute one: it rewrote goalRadius sixty times a
+       second, so a pinch or a shift-scroll was undone before the next
+       frame was drawn and the player could not zoom at all. */
+    if (radius !== null) {
+      // an explicit distance is a deliberate re-framing — a new room, a
+      // new subject — so the camera goes back to being framed for you
+      this.zoomed = false;
+      this.goalRadius = clamp(radius, this.minR, this.maxR);
+    }
     if (phi !== null) this.goalPhi = clamp(phi, this.minPhi, this.maxPhi);
     if (theta !== null) this.goalTheta = theta;
     if (snap) {

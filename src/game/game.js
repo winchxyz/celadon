@@ -332,11 +332,19 @@ export class Game {
           this._onRelease();
         }
         this._pinch = this._pinchStart = touchGeometry();
+        this._movedSince = new Set();
         this._gesture = null;
         this.pointer.right = true;
         return true;
       }
-      return this._touches.size > 2;
+      /* And so is going from two to three, for the same reason. */
+      if (this._touches.size > 2) {
+        this._pinch = this._pinchStart = touchGeometry();
+        this._movedSince = new Set();
+        this._gesture = null;
+        return true;
+      }
+      return false;
     };
 
     const onTouchMove = (e) => {
@@ -372,8 +380,22 @@ export class Game {
          reference the two quantities mean what they say: how much wider
          the fingers are than when they landed, and how far their midpoint
          has carried. */
+      /* ...and not until EVERY finger has moved at least once.
+         Measuring from a fixed reference was necessary and not
+         sufficient. Events still arrive one per finger, so between the
+         first move and the second the hand is half-reported: finger A
+         has travelled 20px and finger B has not moved at all, which
+         reads as the fingers being 20px further apart and the midpoint
+         having carried only 10. spreadBy beats carriedBy, the arbiter
+         commits to 'zoom', and it commits ON PURPOSE for the whole
+         gesture — so a flat two-finger drag zoomed, every time, no
+         matter how straight the hand went.
+         Waiting for every current finger to have reported once makes
+         the geometry a whole hand position rather than half of one. */
+      this._movedSince ??= new Set();
+      this._movedSince.add(e.pointerId);
       const from = this._pinchStart;
-      if (from && !this._gesture) {
+      if (from && !this._gesture && this._movedSince.size >= this._touches.size) {
         const spreadBy = Math.abs(now.spread - from.spread);
         const carriedBy = Math.hypot(now.cx - from.cx, now.cy - from.cy);
         if (spreadBy > 14 || carriedBy > 14) {
@@ -399,6 +421,19 @@ export class Game {
     const onTouchUp = (e) => {
       if (!this._touches.has(e.pointerId)) return false;
       this._touches.delete(e.pointerId);
+      /* Going from three fingers to two is a NEW two-finger gesture.
+         _pinch still held the centroid and spread of the three-finger
+         arrangement, and the next move measured against it — so lifting
+         one finger of three threw the camera the whole distance between
+         two different hand shapes in a single event. Re-seeding from
+         where the remaining fingers actually are makes that delta zero,
+         which is what the player's hand did: nothing. */
+      if (this._touches.size >= 2) {
+        this._pinch = this._pinchStart = touchGeometry();
+        this._movedSince = new Set();
+        this._gesture = null;
+        return true;
+      }
       if (this._touches.size < 2) {
         this._pinch = null;
         this._pinchStart = null;
@@ -465,7 +500,13 @@ export class Game {
 
     c.addEventListener('wheel', (e) => {
       e.preventDefault();
-      if (e.shiftKey || this.state === ST.KILN || this.state === ST.REVEAL || this.state === ST.TITLE) {
+      /* FIRING belongs on this list too. The kiln's key hints stay on
+         screen through the firing and they say SCROLL zoom, but the
+         state has moved on and this test did not know about it — so the
+         wheel fell through to the branch below and spun up a wheel head
+         that is not in the room, while the hint promised a camera. */
+      if (e.shiftKey || this.state === ST.KILN || this.state === ST.FIRING
+        || this.state === ST.REVEAL || this.state === ST.TITLE) {
         this.eng.rig.zoom(e.deltaY);
       } else if (this.state === ST.GLAZE) {
         // There is no wheel to speed up in the glaze room, so scrolling
@@ -1581,10 +1622,16 @@ export class Game {
     this.hud.setHand(sx, sy, verb, power, this.tool.contact > 0.12 && !this.hud.overlayOpen);
 
     // ---- camera --------------------------------------------------------
+    /* Keep the pot in shot as it grows — unless the player has taken
+       the camera. This ran unconditionally, sixty times a second, so a
+       pinch or a shift-scroll was overwritten before the next frame:
+       zooming in the throwing room did nothing whatsoever, which is
+       exactly how it was reported. The framing still follows the pot's
+       height for anyone who has not touched it. */
     const th = Math.max(8, c.height);
     this.eng.rig.frame(
       new THREE.Vector3(0, th * 0.52, 0),
-      clamp(30 + th * 1.55, 34, 96),
+      this.eng.rig.zoomed ? null : clamp(30 + th * 1.55, 34, 96),
       null, null
     );
 
