@@ -12,7 +12,41 @@
 //  actually exists between a tablet and whoever is fixing it.
 // ============================================================
 
-export const BUILD = '2026-08-26.7';
+export const BUILD = '2026-08-26.8';
+
+/**
+ * Notice when the server has a newer build than this tab is running.
+ *
+ * Asked, reasonably, whether anything had been fixed at all — and the
+ * honest answer was that the tablet was almost certainly still running a
+ * build from before the fixes. Safari keeps a tab alive for days and
+ * GitHub Pages caches index.html; between them a page opened once can go
+ * on being the old page indefinitely, with nothing on screen to say so.
+ * Every fix after that point is invisible, and the person testing it is
+ * left to conclude that nothing was done.
+ *
+ * So the game checks, and says.
+ */
+export function watchForNewBuild(hud) {
+  const url = new URL('version.txt', location.href).href;
+  let told = false;
+  const check = async () => {
+    if (told) return;
+    try {
+      const r = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
+      if (!r.ok) return;
+      const there = (await r.text()).trim();
+      if (there && there !== BUILD) {
+        told = true;
+        hud?.toast(
+          `A newer build is out (<b>${there}</b>, you have ${BUILD}). `
+          + 'Reload to pick it up.', 'hot', 20000);
+      }
+    } catch { /* offline is not an error worth mentioning */ }
+  };
+  setTimeout(check, 4000);
+  setInterval(check, 180000);
+}
 
 const row = (k, v, bad = false) =>
   `<div${bad ? ' class="bad"' : ''}>${k} <b>${v}</b></div>`;

@@ -3,10 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "CELADON \u2014 The Long Ash. A 3D pottery game about throwing, glazing and firing vessels at the end of the world.",
+  "description": "CELADON — The Long Ash. A 3D pottery game about throwing, glazing and firing vessels at the end of the world.",
   "scripts": {
     "dev": "vite --port 5180",
-    "build": "vite build",
+    "build": "node tools/stamp-version.mjs && vite build",
     "preview": "vite preview --port 5181",
     "test": "node tools/run-tests.mjs"
   },

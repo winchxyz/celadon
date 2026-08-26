@@ -10,7 +10,7 @@ import { HUD } from './ui/hud.js';
 import { Audio } from './audio/audio.js';
 import { layoutCheck } from './dev/layoutcheck.js';
 import { makeBlankFrameWatch } from './dev/blackframes.js';
-import { makeDiag, BUILD } from './dev/diag.js';
+import { makeDiag, BUILD, watchForNewBuild } from './dev/diag.js';
 
 const boot = document.getElementById('boot');
 const bootBar = document.querySelector('#boot-bar i');
@@ -117,6 +117,8 @@ async function main() {
   // the readout the player can actually reach: four taps on the day
   // counter, because an iPad has no console and no cable
   const diag = makeDiag(eng, game, hud);
+  // and say so if the server has moved on while this tab stayed open
+  watchForNewBuild(hud);
   let last = performance.now();
   let acc = 0, frames = 0;
   function frame(now) {
