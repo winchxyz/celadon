@@ -79,6 +79,18 @@ export class HUD {
 
     $('#advance').addEventListener('click', () => this.game.advance());
 
+    /* Fold away the panels that are there to be READ.
+       Measured on the viewport an iPad in Safari actually hands the page
+       — 1194 x 675 — the interface covered 45% of the screen at the
+       wheel and 58% in the glaze room, and the pot was what was left
+       over. The letter, the instruments, the coach line and the toasts
+       are all read-once; the tool belt, the shelf and the button that
+       moves you on are not, and they stay. */
+    const bare = $('#bare-toggle');
+    if (bare) {
+      bare.addEventListener('click', () => { this.setBare(!this.isBare()); this.game.audio?.click(); });
+    }
+
     this._measure();
     addEventListener('resize', () => this._measure());
 
@@ -114,6 +126,16 @@ export class HUD {
    * flip one class.
    */
   show(on) { this.root.classList.toggle('on', !!on); }
+
+  isBare() { return this.root.classList.contains('bare'); }
+
+  /** Fold the read-once panels away, or bring them back. */
+  setBare(on) {
+    this.root.classList.toggle('bare', !!on);
+    const b = $('#bare-toggle');
+    if (b) b.querySelector('span').textContent = on ? 'Show' : 'Hide';
+    this._measure();
+  }
 
   /* ---------------- header ---------------- */
 

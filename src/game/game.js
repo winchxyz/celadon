@@ -438,6 +438,9 @@ export class Game {
       return;
     }
 
+    // H folds the read-once panels away and brings them back
+    if (k === 'h' || k === 'H') { this.hud.setBare(!this.hud.isBare()); this.audio.click(); return; }
+
     const map = this.hud.toolKeys();
     if (map[k]) { this.selectTool(map[k]); return; }
 

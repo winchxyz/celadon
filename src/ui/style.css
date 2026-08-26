@@ -735,8 +735,8 @@ body.grabbing canvas#gl{cursor:none}
   /* The side panel too: an upright iPad matches both this and the
      narrow-window block, and whichever is written last decides. A
      tablet is touched whatever its width, so this is. */
-  #context{ width:min(420px,50vw); }
-  #context.kiln{ width:min(410px,48vw); }
+  #context{ width:min(348px,40vw); }
+  #context.kiln{ width:min(392px,46vw); }
 }
 
 /* ---------------- the hand: what a press will do ---------------- */
@@ -829,3 +829,68 @@ body.grabbing canvas#gl{cursor:none}
 .glaze.loaded{ box-shadow: inset 3px 0 0 var(--celadon); }
 .glaze.loaded .lock{ color:var(--celadon-deep); font-weight:700 }
 .glaze.nofit{ opacity:.45; cursor:not-allowed }
+
+/* ============================================================
+   A SHORT SCREEN.
+   ============================================================
+   Measured on the viewport an iPad in Safari actually gives the page —
+   1194 x 675, once the toolbar and the tab strip have taken their cut —
+   the interface covered 45% of the screen at the wheel and 58% in the
+   glaze room. The single largest thing on it was not a panel at all: the
+   header ran to 153px, almost a quarter of the display, and the hint bar
+   took another 11%. Two full-width bars, a third of the game, before any
+   panel had been drawn.
+   Nothing is removed here. The type comes down to what a tablet held at
+   arm's length can still read, and the air around it comes out. */
+@media (max-height:760px){
+  #hud-top{ padding:calc(var(--pad)*0.55) calc(var(--pad)*1.2); }
+  #stage-name{ font-size:clamp(17px,1.9vw,24px); letter-spacing:.10em; }
+  #stage-hint{ margin-top:.35em; font-size:11.5px; line-height:1.45; max-width:44ch; }
+  #tool-tip{ margin-top:.3em; font-size:11.5px; line-height:1.4; }
+  .led-v{ font-size:14px; }
+  #ledger{ gap:1.1em; }
+  #hud-bottom{ padding:calc(var(--pad)*0.6) calc(var(--pad)*1.2); }
+  #keyhints{ font-size:10px; }
+  #coach{ padding:.5em 1em; }
+}
+
+/* ============================================================
+   OUT OF THE WAY.
+   ============================================================
+   "Интерфейс для айпада огромный и из-за него очень трудно играть, надо
+   его уменьшить или сделать возможность скрывать ненужные интерфейсы."
+   Both, then. The panels that are there to be READ — the letter, the
+   instruments, the coach line, the toasts — fold away on one tap, and
+   the ones you work with stay. The pot is the thing you came to look at.
+   Nothing is lost while they are folded: the button says so, and the
+   requirements are still enforced by the brief. */
+#hud.bare #commission,
+#hud.bare #gauges,
+#hud.bare #coach,
+#hud.bare #toasts,
+#hud.bare #stage-hint,
+#hud.bare #tool-tip{ display:none; }
+/* The shelf goes too. You choose a bucket and then you paint, and while
+   you are painting the shelf is 40% of the width of an iPad standing
+   between you and the pot. Fold it; one tap brings it back. */
+#hud.bare #context{ display:none; }
+#hud.bare #hud-top{ background:none; }
+
+#bare-toggle{
+  position:absolute; z-index:7;
+  right:calc(var(--pad)*1.4); bottom:calc(var(--bar-h) + var(--pad)*0.7);
+  display:flex; align-items:center; gap:.5em;
+  padding:.62em .95em; border-radius:14px; border:0; cursor:pointer;
+  background:var(--ash-1); color:var(--ink-dim);
+  font:800 10px/1 var(--display); letter-spacing:.14em; text-transform:uppercase;
+  box-shadow:0 3px 0 var(--ash-4), 0 8px 16px rgba(46,33,24,.18), inset 0 1px 0 #fff9;
+}
+#bare-toggle:active{ transform:translateY(2px); box-shadow:0 1px 0 var(--ash-4); }
+#bare-toggle i{
+  display:block; width:13px; height:11px; border:2px solid currentColor;
+  border-radius:3px; opacity:.85;
+}
+#hud.bare #bare-toggle i{ border-style:dashed; opacity:.5; }
+@media (pointer:coarse){
+  #bare-toggle{ padding:.9em 1.15em; font-size:11px; }
+}

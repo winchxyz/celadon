@@ -9,6 +9,7 @@ import { Game } from './game/game.js';
 import { HUD } from './ui/hud.js';
 import { Audio } from './audio/audio.js';
 import { layoutCheck } from './dev/layoutcheck.js';
+import { makeBlackFrameWatch } from './dev/blackframes.js';
 
 const boot = document.getElementById('boot');
 const bootBar = document.querySelector('#boot-bar i');
@@ -111,17 +112,30 @@ async function main() {
   setTimeout(() => boot.classList.add('gone'), 260);
 
   // ---- loop -------------------------------------------------------
+  const blackWatch = makeBlackFrameWatch(eng, game);
   let last = performance.now();
   let acc = 0, frames = 0;
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
+    /* Simulating and drawing are separate failures.
+       These three shared one try, so anything thrown while the world was
+       being updated took the DRAW with it and the canvas presented an
+       empty buffer — a black frame, for exactly as long as the throw
+       kept happening. An intermittent one reads as a flicker. The screen
+       has no business going dark because the clay had a bad tick, so the
+       frame is still drawn from whatever state the world reached. */
     try {
       game.update(dt);
       eng.rig.update(dt);
-      eng.render(dt);
     } catch (e) {
-      console.error('celadon: frame error', e);
+      console.error('celadon: update error', e);
+    }
+    try {
+      eng.render(dt);
+      blackWatch.tick(dt);
+    } catch (e) {
+      console.error('celadon: draw error', e);
     }
     // Adaptive quality: if we are consistently slow, shed something.
     //
@@ -166,11 +180,20 @@ async function main() {
     pump(n = 1, dt = 1 / 60) {
       for (let i = 0; i < n; i++) { game.update(dt); eng.rig.update(dt); }
       eng.render(dt);
+      // so the black-frame watch can be exercised without a compositor:
+      // requestAnimationFrame does not fire in a pane that is not being
+      // displayed, which is where most of this game gets tested
+      blackWatch.tick(dt);
     },
     /** What is sitting on top of what, and what is being cut off.
      *  CELADON.layout({coarse:1}) asks the same with the tablet
      *  stylesheet applied, which is the only place it ever went wrong. */
     layout: layoutCheck,
+    /** Catch a frame that came out black, and say what was true around
+     *  it. Off unless asked for — readPixels stalls the pipeline, and a
+     *  diagnostic that costs frames would be measuring itself. */
+    watchBlackFrames: (v = true) => blackWatch.start(v),
+    blackFrames: () => blackWatch.report(),
   };
 }
 
