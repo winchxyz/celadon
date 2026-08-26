@@ -15,8 +15,13 @@ const devDir = join(here, '..', 'src', 'dev');
 
 // harness.mjs and realgame.mjs are libraries, not benches
 const SHARED = new Set(['harness.mjs', 'realgame.mjs']);
+// A leading _ means a scratch file: something written to answer one
+// question and not meant to be a standing test. They used to be picked
+// up as benches simply for being in the folder, which is how a throwaway
+// probe ended up in the count and, worse, how one could pass by doing
+// nothing at all.
 const benches = readdirSync(devDir)
-  .filter((f) => f.endsWith('.mjs') && !SHARED.has(f))
+  .filter((f) => f.endsWith('.mjs') && !SHARED.has(f) && !f.startsWith('_'))
   .sort();
 
 let failed = 0;

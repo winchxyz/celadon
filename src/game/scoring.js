@@ -10,7 +10,7 @@
 import { clamp, clamp01, lerp, smoothstep, roman } from '../core/util.js';
 import { NS } from '../sim/clay.js';
 import { proportions } from '../render/potMesh.js';
-import { FORMS } from './lore.js';
+import { FORMS, BODIES } from './lore.js';
 
 const GRADES = [
   { at: 96, g: 'I', name: 'Kiln-Blessed' },
@@ -153,6 +153,13 @@ export function appraise(ctx) {
     const dom = dominantGlaze(gs);
     check('glaze', dom === req.glaze, `Glazed in ${glazeName(req.glaze)}`);
   }
+  /* Which clay it was thrown from.
+     Three of the four bodies are unlocked by commissions and then never
+     asked for by anything, so winning Reach Porcelain bought a line in
+     a menu. A brief can name one now, which is also true of the trade:
+     a client who wants a translucent white pot is not asking politely
+     for it to be white, they are telling you which clay to buy. */
+  if (req.body) check('body', clay.bodyDef?.id === req.body, `Thrown in ${bodyName(req.body)}`);
   if (req.effect) {
     const has = hasEffect(fr, req.effect);
     check('effect', has, `Show ${effectName(req.effect)}`);
@@ -226,6 +233,12 @@ function glazeName(id) {
   }[id] ?? id;
 }
 
+/** Read from BODIES rather than copied out of it, so a renamed clay
+ *  cannot leave this saying the old thing. */
+function bodyName(id) {
+  return BODIES.find((b) => b.id === id)?.name ?? id;
+}
+
 function effectName(e) {
   return {
     crystal: 'crystal growth', oilspot: 'oil spots', hare: "hare's fur",
@@ -281,6 +294,7 @@ export function liveRequirements(clay, commission, glazeStats, schedule, fireRes
   if (req.maxD) put('maxD', m.diameter <= req.maxD);
   if (req.maxWall) put('maxWall', m.meanWall <= req.maxWall);
   if (req.glaze && glazeStats) put('glaze', dominantGlaze(glazeStats) === req.glaze);
+  if (req.body) put('body', clay.bodyDef?.id === req.body);
   if (req.atmos && schedule) {
     put('atmos', req.atmos === 'reduction' ? schedule.reduction > 0.5 : schedule.reduction < 0.25);
   }

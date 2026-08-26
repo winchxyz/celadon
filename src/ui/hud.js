@@ -776,6 +776,7 @@ export function describeRequirements(req = {}) {
   if (req.maxD) out.push({ key: 'maxD', label: `No wider than <b>${req.maxD} cm</b>` });
   if (req.maxWall) out.push({ key: 'maxWall', label: `Mean wall under <b>${req.maxWall} cm</b>` });
   if (req.glaze) out.push({ key: 'glaze', label: `Glazed in <b>${GLAZE_BY_ID[req.glaze]?.name ?? req.glaze}</b>` });
+  if (req.body) out.push({ key: 'body', label: `Thrown in <b>${BODIES.find((b) => b.id === req.body)?.name ?? req.body}</b>` });
   if (req.effect) out.push({ key: 'effect', label: `Showing <b>${EFFECTS[req.effect] ?? req.effect}</b>` });
   if (req.atmos) out.push({ key: 'atmos', label: `Fired in <b>${req.atmos}</b>` });
   if (req.minPeak) out.push({ key: 'minPeak', label: `Peak of at least <b>${req.minPeak}°C</b>` });

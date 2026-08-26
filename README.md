@@ -21,7 +21,7 @@
 
 <p>
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-3F9C81?style=flat-square"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-19%20passing-3F9C81?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-21%20passing-3F9C81?style=flat-square">
   <img alt="Art assets" src="https://img.shields.io/badge/art%20assets-0-3F9C81?style=flat-square">
   <img alt="Dependencies" src="https://img.shields.io/badge/runtime%20deps-1-3F9C81?style=flat-square">
   <img alt="Sound" src="https://img.shields.io/badge/sound-CC0-3F9C81?style=flat-square">
@@ -66,7 +66,7 @@ nine small CC0 sound recordings — about 140 kB — and it runs without them.
 
 It is already running at **[winchxyz.github.io/celadon](https://winchxyz.github.io/celadon/)** —
 no install, nothing to download. Every push to `master` rebuilds it, and the
-nineteen benches have to pass before it deploys.
+twenty-one benches have to pass before it deploys.
 
 To run it locally:
 
@@ -77,7 +77,7 @@ npm run dev      # http://localhost:5180
 
 ```bash
 npm run build && npm run preview   # production bundle
-npm test                           # nineteen headless benches, ~5 s
+npm test                           # twenty-one headless benches, ~10 s
 ```
 
 **Requirements:** a browser with WebGL2 and hardware acceleration — recent
@@ -264,11 +264,15 @@ Firing costs fuel, and fuel costs ash-marks, so every schedule is a bet.
 
 ## The rest of it
 
-Twelve story commissions with named patrons, then endless procedural ones.
-Four clay bodies, twelve glazes and a handful of tools unlock as your standing
-rises. Every piece that survives goes on **the shelf**; every commission and
-every mistake adds a fragment to **the codex**. It all saves to
-`localStorage`.
+**Twenty-four story commissions** with named patrons, then endless procedural
+ones. Every glaze in the game is asked for by name at some point, every form
+including the plate, and every clay body: a brief can tell you which clay to
+throw in, which is what a client who wants a translucent white plate is
+actually doing. Four clay bodies, twelve glazes and a handful of tools unlock
+as your standing rises. Every piece that survives goes on **the shelf**; every
+commission and every mistake adds a fragment to **the codex**. It all saves to
+`localStorage` — and an old save comes back to the job it was on, even though
+the campaign has since doubled in length under it.
 
 Pieces are graded out of a hundred on Form, Craft, Surface, Fire and Brief,
 and the appraisal tells you exactly what it thought — including when the thing
@@ -375,7 +379,7 @@ Most of what makes this game hard to get right is in the simulation, not the
 renderer, so nearly all of it can be tested headlessly.
 
 ```bash
-npm test          # all nineteen, about five seconds
+npm test          # all twenty-one, about ten seconds
 ```
 
 They fall into four groups.
@@ -414,6 +418,9 @@ simulation bench can pass while the game itself misbehaves. For a while one did.
 | `heat` | the two blackbody curves — one in JavaScript lighting the kiln, one in GLSL glowing the pot inside it — still agree across 400–1400 °C |
 | `encoding` | every file is still clean UTF-8, and the characters the interface is drawn with are still in it. A shell that reads UTF-8 as ANSI once wrote three files back double-encoded, and a terminal shows the damaged file and the healthy one identically — so this reads bytes |
 | `firing` | what each kiln promises. On the Guild's schedule every one of the twelve glazes reaches maturity, none is destroyed, no wall thickness is cracked by the ramp, the brief's atmosphere is honoured, and a new potter can pay for it on day one. And, so that the hard mode is still a hard mode, that firing it yourself 200° short still comes out a scab |
+| `campaign` | the whole campaign walked in order from an empty save. Every brief asks for a glaze and a clay the player already has, every effect is one the kiln can produce, no brief fixes a temperature its own glaze cannot reach, the fee never falls away, the kiln can always be lit, and the last rank is not handed out in the first two thirds. It exists because three commissions in a row used to ask for a glaze they themselves unlocked — a fault of the ORDER, invisible in any one of them |
+| `savemig` | an old save meeting a longer campaign. Progress is stored as a position in the list, so growing the list in the middle used to move everyone: a finished player was dropped back into the middle of the campaign. Nobody is sent back to a commission they have already done |
+| `slots` | a pot carries three glazes. Opening a bucket to look costs nothing; painting with it costs a layer; and a fourth glaze is refused rather than granted at the expense of a layer already painted — which is what used to happen, silently, in a room with no undo |
 
 **Does the money work?**
 

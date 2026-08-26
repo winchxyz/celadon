@@ -122,14 +122,31 @@ export const BODIES = [
 /*  Standing                                                           */
 /* ------------------------------------------------------------------ */
 
+/**
+ * The ladder, rescaled when the campaign doubled.
+ *
+ * These numbers were set against twelve commissions worth 2365 of base
+ * standing. There are twenty-four now, worth 4993, and appraise pays
+ * standing as base * payMultiplier * 0.9 — about 1.81 for perfect work.
+ * Left alone, the top rung was crossed at the fourteenth commission on
+ * good work and by a player scraping through every job in the game, so
+ * 'Of the Ninth Ash' sat in the corner of the screen for the last ten
+ * jobs and was then solemnly awarded by c12, which is the commission
+ * that is supposed to confer it.
+ *
+ * Scaled by 2.2, which keeps the shape of the old ladder exactly and
+ * puts the last rung back where it was: reachable by finishing the
+ * campaign well, and not by finishing it badly. campaign.mjs holds
+ * both ends of that down.
+ */
 export const RANKS = [
   { at: 0, name: 'Unproven' },
-  { at: 120, name: 'Barrel Hand' },
-  { at: 320, name: 'Wheelwright' },
-  { at: 620, name: 'Ash-Sworn' },
-  { at: 1050, name: 'Guild Hand' },
-  { at: 1650, name: 'Kilnmaster' },
-  { at: 2500, name: 'Of the Ninth Ash' },
+  { at: 260, name: 'Barrel Hand' },
+  { at: 700, name: 'Wheelwright' },
+  { at: 1350, name: 'Ash-Sworn' },
+  { at: 2300, name: 'Guild Hand' },
+  { at: 3600, name: 'Kilnmaster' },
+  { at: 5500, name: 'Of the Ninth Ash' },
 ];
 
 export function rankFor(rep) {
@@ -149,8 +166,11 @@ export function rankFor(rep) {
      maxWall     cm  (thinness test)
      glaze       glaze id that must be the dominant coat
      effect      one of: crystal, oilspot, hare, copperRed, carbon, craze,
-                 peel, opal, metal, matureOnly
+                 peel, opal, metal.  NOT matureOnly: it was listed here
+                 for a long time and has never been implemented in
+                 hasEffect, so a brief asking for it can never be met.
      atmos       'reduction' | 'oxidation'
+     body        clay body id: ashstone, blackhill, porcelain, saltflat
      noDefects   true
 */
 
@@ -171,6 +191,26 @@ export const COMMISSIONS = [
     },
   },
   {
+    id: 'c1a',
+    title: 'A Plate Is Not A Shallow Bowl',
+    from: 'Dorn Kessick, assayer at the sieve-house, owns a straight edge',
+    pay: 90, rep: 35,
+    text:
+      '"I weigh sieved ash on these and read the colour off the floor, so the floor has to ' +
+      'be flat — flat, not nearly flat. Every plate I have been sold in nine years humped ' +
+      'up in the middle before it was dry. Compress the base until you are sick of it, and ' +
+      'then compress it again."',
+    require: { form: 'plate', minH: 3, maxH: 7, minD: 20 },
+    lore: {
+      h: 'Pencilled on the shed wall beside the wheel, in your grandmother\'s hand',
+      p:
+        '"A plate cracks in an S and the S is yours, not the fire\'s. Every part of that floor ' +
+        'was dragged outward under your fingers and lies in the direction it went — except ' +
+        'the pinhead at the centre, which never moved at all. Dry it, and the two of them ' +
+        'pull apart along the seam between them."',
+    },
+  },
+  {
     id: 'c2',
     title: 'Ninety Bowls, One At A Time',
     from: 'The Almoner of the Dry Quarter',
@@ -184,6 +224,46 @@ export const COMMISSIONS = [
       h: 'The Almoner, later that week',
       p: '"You would not think a shape could keep someone alive. It cannot. But a person who is handed ' +
         'a made thing eats differently from a person who is handed a handful, and I will not be argued out of it."',
+    },
+  },
+  {
+    id: 'c2a',
+    title: 'Heavy Enough Empty',
+    from: 'Corrin Slate, who pickles what the ash still lets grow',
+    pay: 105, rep: 45,
+    text:
+      '"Everything I put down has to come back out, and it comes out with my hand, so do ' +
+      'not choke the neck — the last one I was sold I cannot get past the shoulder to ' +
+      'scrub. Keep the wall honest as well. I lift these full, off a high shelf, ' +
+      'one-handed."',
+    require: { form: 'jar', minH: 12, maxH: 18, maxWall: 0.9 },
+    lore: {
+      h: 'On what a wall lets through',
+      p:
+        '"A body taken forty degrees short of vitrification is not a container, it is a slow ' +
+        'sieve. It will hold brine for a week and sweat it for a year, and the salt comes ' +
+        'back out through the glaze in white whiskers that tell everyone exactly what you ' +
+        'did."',
+    },
+  },
+  {
+    id: 'c2b',
+    title: 'Proof Of The Sea',
+    from: 'Anke Ost, who teaches letters at the ash-kitchen and is paying for this herself',
+    pay: 125, rep: 60,
+    text:
+      '"There is a page in the book about the sea and fourteen children who think I ' +
+      'invented it. Kingfisher, then, and starve the kiln — I have seen what that iron does ' +
+      'with air in it, and amber proves nothing. Thick in the well and thin over the rim, ' +
+      'so they can watch one glaze do two things and stop arguing with me."',
+    require: { form: 'bowl', minH: 5, maxH: 8, minD: 13, glaze: 'celadon', atmos: 'reduction' },
+    lore: {
+      h: 'On losing it in the cooling',
+      p:
+        '"Iron changes its mind on the way down as readily as on the way up. Let a kiln ' +
+        'breathe while it cools and it hands the oxygen straight back — the green you starved ' +
+        'four hours for will be amber by morning, with nothing on the pot to say what ' +
+        'happened. Brick the ports and let it come down hungry."',
     },
   },
   {
@@ -216,6 +296,27 @@ export const COMMISSIONS = [
       h: 'Scratched inside a Guild kiln door',
       p: '"Reduction is not a setting. It is an argument with the fire about who gets the air, ' +
         'and the fire takes it out of the pots."',
+    },
+  },
+  {
+    id: 'c4b',
+    title: 'Nothing In It But White',
+    from: 'Tessit Wray, who keeps what is left of the dry stores',
+    pay: 165, rep: 105,
+    text:
+      '"Shino, and leave the damper alone — I have seen what Wick has done with his and I ' +
+      'do not want ghosts on mine. Plain white, thick, pinholed, the way it comes when the ' +
+      'fire is fed. An urn, and tall: it stands on a stone floor in a hall with a broken ' +
+      'window, and I want the lip out where a hand can get under it."',
+    require: { form: 'urn', glaze: 'shino', atmos: 'oxidation', minH: 20, maxWall: 0.8 },
+    lore: {
+      h: 'On why a shino is not a smooth glaze',
+      p:
+        '"It goes on thick because it barely melts, and it barely melts because it is mostly ' +
+        'the clay it is standing on. What comes out is a glass that never finished becoming ' +
+        'one — pinholed where the gas left it, crawled where it pulled away from itself, and ' +
+        'lit from underneath. A shino that has come out flat and even has been overfired, and ' +
+        'the potter has thrown away the only thing it had."',
     },
   },
   {
@@ -252,6 +353,27 @@ export const COMMISSIONS = [
     },
   },
   {
+    id: 'c6b',
+    title: 'What Comes Out Of My Kiln',
+    from: 'Hark Merrow, who packs the Guild kiln and sweeps out what runs',
+    pay: 260, rep: 165,
+    text:
+      '"I set four hundred pots a week and I am the one who chisels the failures off my own ' +
+      'shelves. Give me a bowl I can stack — foot true, wall even top to bottom, and ' +
+      'nothing on it that is going to move. I do not care what colour it is. I care that ' +
+      'the next one sits on it."',
+    require: { form: 'bowl', minD: 18, maxWall: 0.62, noDefects: true },
+    lore: {
+      h: 'On setting a kiln',
+      p:
+        '"Pots are not stacked, they are wadded — three pellets of alumina and rice husk ' +
+        'under every foot, because a glazed foot and a shelf become one object at temperature ' +
+        'and stay that way. The wadding burns out and leaves three grey scars, and every old ' +
+        'pot worth having carries them underneath. A foot with no marks on it was fired ' +
+        'alone, by somebody who could afford to."',
+    },
+  },
+  {
     id: 'c7',
     title: 'Flowers That Will Not Wilt',
     from: 'The Widow Sarn',
@@ -260,7 +382,7 @@ export const COMMISSIONS = [
       '"Zinc crystal. Actual flowers in the glass, not a suggestion of them. My husband is nine years dead ' +
       'and there has not been a flower in this city since. Hold the kiln at eleven hundred and be patient."',
     require: { form: 'vase', glaze: 'crystal', effect: 'crystal', minH: 20 },
-    unlocks: { glaze: 'nuka' },
+    unlocks: { glaze: 'cobalt' },
     lore: {
       h: 'On growing crystals',
       p: '"Zinc silicate is a bad glass and a magnificent crystal. Hold it just below melting and it stops ' +
@@ -276,7 +398,7 @@ export const COMMISSIONS = [
       '"Silver spots on tenmoku. Iron boiling out and freezing on the surface. Take it to thirteen hundred ' +
       'and do not flinch. You will probably ruin it. Do it anyway."',
     require: { form: 'chawan', glaze: 'tenmoku', effect: 'oilspot', minPeak: 1290 },
-    unlocks: { glaze: 'kaki', body: 'saltflat' },
+    unlocks: { glaze: 'salt', body: 'saltflat' },
     lore: {
       h: 'Oren Sulk, paying up',
       p: '"That is a bowl that happened, not a bowl that was made. I want you to understand the difference ' +
@@ -292,11 +414,31 @@ export const COMMISSIONS = [
       '"An urn, tall, in Guild Blue, and it must be flawless. No craze, no crawl, no run onto the shelf. ' +
       'If it survives you may paint your grandmother\'s mark on the foot and mean it."',
     require: { form: 'urn', glaze: 'cobalt', minH: 26, maxWall: 0.62, noDefects: true },
-    unlocks: { glaze: 'cobalt', title: 'Guild Hand' },
+    unlocks: { glaze: 'raku', title: 'Guild Hand' },
     lore: {
       h: 'The mark itself',
       p: '"Two strokes and a dot: the wheel, the flame, and the speck of ash that started all of it. ' +
         'Painted in cobalt because cobalt is the one colour the fire cannot argue with."',
+    },
+  },
+  {
+    id: 'm2',
+    title: 'Blue That Stays Where It Is Put',
+    from: 'Bettony Rask, who dyes what wool still comes down off the high pasture',
+    pay: 430, rep: 270,
+    text:
+      '"Guild Blue, and I want it flat — no pooling in the throwing rings, no thin patch on ' +
+      'the shoulder where it has run off. I match dye lots for a living and I can see a ' +
+      'quarter of a shade at ten paces. Tall enough to stand a hank in without bending it, ' +
+      'and light enough that I can lift it wet."',
+    require: { form: 'vase', glaze: 'cobalt', minH: 26, maxWall: 0.55 },
+    lore: {
+      h: 'On cobalt, and how little of it is wanted',
+      p:
+        '"Half a part in a hundred is a sky. Two parts is a night. Four is a black that has ' +
+        'forgotten it was ever blue, and there is no way back down the scale — it is the one ' +
+        'oxide that will not be thinned by anything except more glass. Weigh it on the ' +
+        'smallest balance in the shed, and weigh it twice."',
     },
   },
   {
@@ -308,11 +450,32 @@ export const COMMISSIONS = [
       '"We throw salt into the firebox and let it find the pot itself. No brush touches it. ' +
       'Bring a bottle to the shore firing and we will show you what vapour does to a shoulder."',
     require: { form: 'bottle', glaze: 'salt', effect: 'peel', minH: 24 },
-    unlocks: { glaze: 'salt' },
+    unlocks: { glaze: 'nuka' },
     lore: {
       h: 'What salt does',
       p: '"Sodium chloride comes apart above a thousand and the sodium goes looking for silica. ' +
         'It finds it in the clay. The glaze is not applied — it is grown, out of the pot, by the fire."',
+    },
+  },
+  {
+    id: 'c7b',
+    title: 'Grey Throws No Light',
+    from: 'Perrin Rill, lampwright, who begrudges every wick',
+    pay: 330, rep: 250,
+    text:
+      '"A jar in the straw-ash white, tall enough to stand a lamp inside it. Leave the ' +
+      'damper open — I am selling light, and I want every part of that surface handing it ' +
+      'back. Straw ash on its own, with nothing laid over it. A shade that eats a wick is a ' +
+      'shade I do not sell twice."',
+    require: { form: 'jar', glaze: 'nuka', atmos: 'oxidation', minH: 18, maxWall: 0.7 },
+    lore: {
+      h: 'On the white in straw ash',
+      p:
+        '"Grasses take silica up out of the ground and lay it down inside their own stalks in ' +
+        'order to stand upright. Burn a field and what is left is very nearly silica and ' +
+        'almost nothing else, which is why the ash of a field makes a white glaze and the ash ' +
+        'of a forest makes a green one. There is no white in it anywhere. There is only ' +
+        'silica that never finished dissolving."',
     },
   },
   {
@@ -324,11 +487,112 @@ export const COMMISSIONS = [
       'The raku firing is not a Guild technique and it is not permitted. You open the kiln at nine hundred ' +
       'and take the pot out while it is still moving, and bury it in straw, and it either survives or it does not.',
     require: { form: 'chawan', glaze: 'raku', effect: 'metal', maxPeak: 1010 },
-    unlocks: { glaze: 'raku' },
+    unlocks: { glaze: 'kaki' },
     lore: {
       h: 'Why it is forbidden',
       p: '"Not because it is dangerous. Because it cannot be repeated. The Guild exists to make the fire ' +
         'predictable, and a raku pot is a confession that it never was."',
+    },
+  },
+  {
+    id: 'm1',
+    title: 'Twenty-Six Across, And Flat',
+    from: 'Ganner Sill, cook to the Ember Guild and no admirer of them',
+    pay: 380, rep: 290,
+    text:
+      '"Everything I put on a table is grey. Give me a plate the colour of a persimmon — ' +
+      'twenty-six across, and flat enough that a sauce does not all run to one side. Do not ' +
+      'starve the kiln: hungry iron goes the colour of liver, and I will send it back."',
+    require: { form: 'plate', minH: 4, maxH: 7, minD: 26, glaze: 'kaki', noDefects: true },
+    lore: {
+      h: 'On iron, coming back',
+      p:
+        '"An iron saturate carries more iron than the glass can dissolve, and on the way down ' +
+        'it hands the surplus back. Below about a thousand degrees it surfaces as hematite, ' +
+        'in plates too small to see, and that is the persimmon. Cool the same glaze fast and ' +
+        'it never gets the chance — it stays black, it is a tenmoku, and nobody looking at ' +
+        'the two would believe the recipe was the same."',
+    },
+  },
+  {
+    id: 'c13',
+    title: 'Forty Pounds Of Seed',
+    from: 'Halvard Onn, seedsman, who has no field',
+    pay: 520, rep: 310,
+    text:
+      '"Forty pounds of hard wheat, nine winters old, and the only lot left in the Reach ' +
+      'that still sprouts. Nuka on it — straw ash, which is the one part of a harvest I ' +
+      'still have in any quantity. Vitrified, not merely glazed; if it takes up damp at the ' +
+      'foot the whole lot is compost, and I do not have a second forty pounds."',
+    require: { form: 'jar', glaze: 'nuka', minH: 22, maxWall: 0.62, noDefects: true },
+    lore: {
+      h: 'On lids, and why they are fired in place',
+      p:
+        '"Nothing leaves a kiln the shape it went in. A lid ground to fit a cold jar will not ' +
+        'fit that same jar once both have been through the fire, because the two will not ' +
+        'move the same way. So it is fired sitting in its own seat, with a smear of alumina ' +
+        'between them so they cannot weld, and the pair go out of true together."',
+    },
+  },
+  {
+    id: 'm3',
+    title: 'Match It',
+    from: 'Sibbe Anrath, pledge-broker at Lower Fen, who has never returned a deposit',
+    pay: 540, rep: 340,
+    text:
+      '"There is a cup in my window, pledged against four marks before the mountain ever ' +
+      'opened, and nobody is coming back for it. Sea-green, rings all the way up, and a ' +
+      'wall no heavier than the one it is standing next to. Make me its pair — shut the ' +
+      'damper and keep it shut, and do not smooth the rings out, because the green has ' +
+      'nowhere to sit but in them."',
+    require: { form: 'cup', glaze: 'celadon', atmos: 'reduction', minH: 10, maxWall: 0.4, noDefects: true },
+    lore: {
+      h: 'On the half of a celadon that is not glaze',
+      p:
+        '"A celadon is a window with a little iron in it, and what you are looking at is the ' +
+        'clay underneath. The same bucket over a grey body and over a white one gives two ' +
+        'pots that will not sit on a shelf together. The Guild will sell you the recipe for ' +
+        'almost nothing. It charges properly for the clay."',
+    },
+  },
+  {
+    id: 'c14',
+    title: 'What She Can Carry',
+    from: 'Ilma Vetch, who has sold the house',
+    pay: 620, rep: 350,
+    text:
+      '"A plate, in porcelain — I am walking out and I will not carry stoneware a thousand ' +
+      'miles. Celadon over it, and shut the damper. Thin enough that the lamp gets through ' +
+      'the rim, or it is not porcelain, only expensive. It is not a keepsake; I intend to ' +
+      'eat off it."',
+    require: { form: 'plate', body: 'porcelain', glaze: 'celadon', atmos: 'reduction', minH: 4, maxH: 7, minD: 22, maxWall: 0.55 },
+    lore: {
+      h: 'Why the plate is the last thing they teach you',
+      p:
+        '"A cylinder carries its own weight down a wall. A plate carries it out across a ' +
+        'floor a finger thick, and that floor is still moving after the hand has stopped. ' +
+        'Compress it in the first minute or it will open along a long S three days later, in ' +
+        'the drying, in the dark, when there is nothing whatever to be done about it."',
+    },
+  },
+  {
+    id: 'c15',
+    title: 'Let It Run',
+    from: 'Bern Gedd, clearing his mother\'s shed',
+    pay: 740, rep: 400,
+    text:
+      '"Mother is dead and there is a barrel of tenmoku slip in her shed, mixed and dated ' +
+      'and never used. A bottle, twenty-six at the least, thrown in Blackhill — she held ' +
+      'that a smooth body gives you a stripe and a toothy one gives you fur. Thick coat, ' +
+      'hot kiln, let it run. Not an urn; she was a potter, not an occasion."',
+    require: { form: 'bottle', body: 'blackhill', glaze: 'tenmoku', effect: 'hare', minH: 26 },
+    lore: {
+      h: 'From Mirrin Gedd\'s firing book, two pages from the end',
+      p:
+        '"Tenmoku is more iron than the glass can hold. When it moves it comes apart into two ' +
+        'liquids, one thin and one heavy, and the heavy one runs down the wall in threads and ' +
+        'takes the iron with it. That is the fur. You cannot paint it and you cannot stop it. ' +
+        'All you get to decide is how far it gets."',
     },
   },
   {

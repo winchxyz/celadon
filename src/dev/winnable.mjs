@@ -162,8 +162,12 @@ console.log('\n  Playing each brief with sloppy hands, following the coach.\n');
 console.log('  brief                          ball    result                      H    ok   grade');
 console.log('  -----------------------------  ------  --------------------------  ---  ---  -----');
 
+/* All of them. This used to stop at eight, which was two thirds of a
+   twelve-commission campaign and is now a third of a twenty-four one —
+   so the half of the game that was added would never have been played
+   by anything at all. */
 let wins = 0;
-for (let i = 0; i < Math.min(8, COMMISSIONS.length); i++) {
+for (let i = 0; i < COMMISSIONS.length; i++) {
   const com = COMMISSIONS[i];
   const r = play(com, 100 + i * 7);
   const allMet = r.met.height && r.met.width && r.met.wall && !r.dead;
@@ -180,10 +184,37 @@ for (let i = 0; i < Math.min(8, COMMISSIONS.length); i++) {
     '  ' + String(r.rep.total).padStart(3) + ' ' + r.rep.grade.g
   );
 }
-console.log(`\n  geometric requirements met on ${wins} of 8 briefs\n`);
+console.log(`\n  geometric requirements met on ${wins} of ${COMMISSIONS.length} briefs\n`);
 
-if (globalThis.__deaths && globalThis.__deaths.length) {
+const deaths = globalThis.__deaths ?? [];
+if (deaths.length) {
   console.log('  deaths:');
-  for (const d of globalThis.__deaths) console.log('    ' + d);
+  for (const d of deaths) console.log('    ' + d);
   console.log('');
 }
+
+/* This bench used to assert nothing whatever. It printed a table, exited
+   zero, and counted itself among the passing — which is worse than not
+   existing, because the row of results looked like a check.
+   What it can honestly hold down is narrow. The simulated potter here is
+   crude: it follows the coach with deliberately imprecise hands and
+   misses most size targets, on the shipped briefs as much as the new
+   ones, so a met-rate threshold would only be measuring the puppet. What
+   IS meaningful is that no brief in the campaign leads a potter who does
+   as they are told into destroying the pot — that would be a brief
+   asking for something the clay cannot survive being asked for.
+
+   One brief is allowed to defeat this potter, and the campaign says
+   which: c12 carries minScore, the only requirement in the game that
+   demands excellence rather than compliance, and a piece the Guild will
+   only accept at 78 is meant to be beyond someone working sloppily.
+   Anywhere else, a death means a brief is asking for something the clay
+   cannot survive being asked for. */
+const exam = new Set(COMMISSIONS.filter((c) => c.require?.minScore).map((c) => c.title.slice(0, 26)));
+const unexpected = deaths.filter((d) => ![...exam].some((t) => d.startsWith(t)));
+console.log(`   ${unexpected.length ? 'FAIL' : 'ok  '}  following the coach kills the pot only where the ` +
+  `brief demands a grade` +
+  (unexpected.length ? ` — also died on: ${unexpected.map((d) => d.split(' ->')[0]).join(', ')}`
+                     : ` (${deaths.length} death in ${COMMISSIONS.length} briefs, on the one that asks for 78)`));
+console.log('');
+process.exit(unexpected.length ? 1 : 0);
