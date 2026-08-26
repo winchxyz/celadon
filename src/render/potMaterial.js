@@ -618,7 +618,26 @@ vec3  celEmis = S.emis;
 float celBump = S.bump;
 float celIrid = S.irid;
 `)
-      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp(celRough, 0.015, 1.0);')
+      /* The floor here was 0.015, and it was making infinities.
+         The composer draws into a half-float buffer, and three switches
+         tone mapping off whenever it draws into a render target, so what
+         lands there is raw linear radiance with a ceiling of 65504. At a
+         roughness of 0.015 the GGX specular lobe peaks at a BRDF value
+         of 6.3e4, which means an irradiance of only 1.04 saturates it.
+         The shed lamp delivers 5.22 at thirty units and the kiln light
+         36.1 at six — so a highlight on a glossy pot wrote +Inf as a
+         matter of routine.
+         From there the bloom did the rest: its high pass takes anything
+         over 1.02, and five mips of Gaussian reach 1156px in every
+         direction on a 1611px buffer, so one bad texel became the whole
+         frame, additively blended over the picture. What came out the
+         far end was NaN, and a NaN written to an 8-bit buffer is black
+         on Apple silicon. A black frame, for one frame, moving with the
+         highlight — which is what an iPad was showing.
+         At 0.05 the same lobe tolerates an irradiance of 128, three and
+         a half times the brightest thing in the room, and the glaze is
+         still a mirror. */
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp(celRough, 0.05, 1.0);')
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = clamp(celMetal, 0.0, 1.0);')
       .replace('#include <normal_fragment_maps>', /* glsl */`
 normal = bumpNormal(normal, -vViewPosition, celBump * 0.012, 1.0);

@@ -68,8 +68,6 @@ const GradeShader = {
     uGain: { value: new THREE.Vector3(1.018, 1.000, 0.982) },
     uSat: { value: 1.12 },
     uVigCol: { value: new THREE.Vector3(0.055, 0.036, 0.026) },
-    uFade: { value: 0.0 },
-    uFadeCol: { value: new THREE.Color(0, 0, 0) },
     uRes: { value: new THREE.Vector2(1, 1) },
   },
   vertexShader: /* glsl */`
@@ -78,9 +76,9 @@ void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(p
 `,
   fragmentShader: /* glsl */`
 uniform sampler2D tDiffuse;
-uniform float uTime, uVignette, uGrain, uAberr, uHaze, uHazeY, uSat, uFade;
+uniform float uTime, uVignette, uGrain, uAberr, uHaze, uHazeY, uSat;
 uniform vec3 uVigCol;
-uniform vec3 uLift, uGain, uFadeCol;
+uniform vec3 uLift, uGain;
 uniform vec2 uRes;
 varying vec2 vUv;
 
@@ -119,8 +117,24 @@ void main(){
      sets do not. If the edges of the picture need to go down, the room
      is lit wrong. */
 
-  col = mix(col, uFadeCol, uFade);
-  gl_FragColor = vec4(col, 1.0);
+  /* This mix ran on every pixel of every frame and did nothing: uFade is
+     0.0 where it is declared and is never assigned anywhere in the
+     source. Dead weight would be harmless — manufacturing NaN is not.
+     Metal DEFINES mix(x, y, a) as x + (y - x) * a, so with an infinity
+     arriving from an over-range highlight this evaluates Inf + (0 - Inf)
+     * 0, which is Inf + NaN, which is NaN. It was one of the steps that
+     turned a blown-out specular into a black frame on iOS and could not
+     do anything else, because the weight was always zero.
+
+     The guard that replaces it is the honest version of what a display
+     pass owes the screen: whatever arrives, something finite leaves.
+     A NaN fails every comparison, so testing NOT (x >= 0.0) catches it
+     where a clamp would pass it straight through. */
+  col = mix(col, vec3(0.0), vec3(
+    !(col.r >= 0.0) ? 1.0 : 0.0,
+    !(col.g >= 0.0) ? 1.0 : 0.0,
+    !(col.b >= 0.0) ? 1.0 : 0.0));
+  gl_FragColor = vec4(min(col, vec3(64.0)), 1.0);
 }
 `,
 };
