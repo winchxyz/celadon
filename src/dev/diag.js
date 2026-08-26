@@ -12,7 +12,7 @@
 //  actually exists between a tablet and whoever is fixing it.
 // ============================================================
 
-export const BUILD = '2026-08-27.4';
+export const BUILD = '2026-08-27.5';
 
 /**
  * Notice when the server has a newer build than this tab is running.
