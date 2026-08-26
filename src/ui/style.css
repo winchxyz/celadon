@@ -1083,4 +1083,46 @@ body.grabbing canvas#gl{cursor:none}
   .grade small{margin-top:.7em}
   .lore-card{padding:.9em 1.1em;margin-top:1.1em}
   .ov-actions{margin-top:1.4em}
+
+  /* The bucket shelf, on a short screen.
+     Twelve glazes in two columns is six rows of a two-line item, and
+     measured that is 350px of list. At 1280x720 the panel can give it
+     277 and at 1024x600 only 185 — so a third to a half of the shelf
+     was off the bottom, which is the same complaint as everything else
+     here: a scrollbar standing in for a decision about what matters.
+     Each item is a name and a type stacked. The name is what you are
+     choosing by; the type is a label you have already learnt by the
+     time you own twelve of them. Dropping it makes every item one line
+     instead of two and the whole shelf fits with room to spare, with
+     the names still full width and still readable. */
+}
+
+/* The bucket shelf gets its own threshold, and a taller one.
+   At 1194x834 — an iPad in landscape, the single most likely screen
+   this game is played on — the shelf needed 350px and the panel could
+   give it 348. Two pixels, and the twelfth glaze is under the fold.
+   820 is the wrong number to hang that on; the shelf runs out of room
+   well before the results card does. */
+/* Narrow counts too, not just short. In portrait the screen is tall but
+   the panel is 34vw of it — 261px at 768 wide — and a two-line item in a
+   cramped column is the worst of both: the type label is ellipsised down
+   to nothing useful AND it costs a whole row of height. 768x1024 missed
+   fitting by five pixels on the height rule alone. */
+@media (max-height: 900px), (max-width: 900px){
+  .glaze{padding:.2em .4em}
+  .glaze .gt{display:none}
+}
+
+/* Shorter still, and one line each is no longer enough: at 600px tall
+   the panel has 185px and twelve single-line items are 258. Three
+   columns makes it four rows instead of six. The names get tighter and
+   one or two will ellipsis, which is the right thing to lose — a
+   shortened name you can still recognise beats a glaze you cannot see
+   at all. */
+@media (max-height: 680px){
+  .glaze-list{grid-template-columns:1fr 1fr 1fr}
+  .glaze{grid-template-columns:14px 1fr;gap:.35em;padding:.16em .3em}
+  .glaze .sw{width:14px;height:14px}
+  .glaze .gn{font-size:11px}
+  .glaze .lock{display:none}
 }
