@@ -470,6 +470,7 @@ export class HUD {
     for (const g of GLAZES) {
       const owned = state.glazes.includes(g.id);
       const row = el('div', 'glaze' + (owned ? '' : ' locked') + (state.slot === g.id ? ' sel' : ''));
+      row.dataset.g = g.id;
       row.innerHTML =
         `<span class="sw" style="background:${g.swatch}"></span>` +
         `<span><span class="gn">${g.name}</span><br><span class="gt">${g.family}</span></span>` +
@@ -496,9 +497,30 @@ export class HUD {
       'Thin coats break over edges.<br>Thick coats run, and crawl.'));
   }
 
-  updateGlazeSelection(id) {
+  /**
+   * Which bucket the brush is in, and which are on the pot.
+   *
+   * A pot carries three layers, so the three it is carrying have to be
+   * visible — otherwise the first a player hears about the limit is
+   * being refused a fourth. `loaded` marks them; `full` puts the rest
+   * of the shelf out of reach so the refusal is not a surprise.
+   *
+   * It used to match rows by reading their displayed name back out of
+   * the DOM, which is one renamed glaze away from selecting nothing.
+   */
+  updateGlazeSelection(id, slots = null, roomLeft = true) {
+    const on = slots ? slots.filter(Boolean).map((s) => s.id) : null;
     for (const row of this.context.querySelectorAll('.glaze')) {
-      row.classList.toggle('sel', row.querySelector('.gn')?.textContent === GLAZE_BY_ID[id]?.name);
+      const gid = row.dataset.g;
+      row.classList.toggle('sel', gid === id);
+      if (!on) continue;
+      const carried = on.includes(gid);
+      row.classList.toggle('loaded', carried);
+      // Out of reach only when there is genuinely nowhere to put it: a
+      // layer that was opened and never painted with is still free.
+      const nofit = !roomLeft && !carried && !row.classList.contains('locked');
+      row.classList.toggle('nofit', nofit);
+      if (nofit) row.title = 'The pot is already carrying three glazes, and all three have been used.';
     }
   }
 

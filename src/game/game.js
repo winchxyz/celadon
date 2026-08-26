@@ -1626,27 +1626,64 @@ export class Game {
     this.hud.glazePanel(
       { glazes: this.free ? this._freeGlazes() : this.save.glazes, slot: this.slots[0]?.id, thickness: this.glazeThickness },
       (id) => this._pickGlaze(id),
-      (v) => { this.glazeThickness = v; }
+      (v) => { this.glazeThickness = v; },
     );
+    // mark the one bucket already open, so the shelf reads correctly
+    // before the player has touched anything
+    this._glazeRoom = this._glazeRoomLeft();
+    this.hud.updateGlazeSelection(this.slots[0]?.id, this.slots, this._glazeRoom);
     this.eng.rig.frame(new THREE.Vector3(0, c.height * 0.5, 0), clamp(28 + c.height * 1.5, 30, 80), 1.30, CAMERA.theta);
     this.hud.toast('Bisque fired. Another four parts in a hundred gone.', '', 4200);
     this._glazeHint('dip');
   }
 
+  /** Is there anywhere to put another glaze: an empty layer, or one
+   *  that was opened and never actually painted with. */
+  _glazeRoomLeft() {
+    return this.slots.some((s, i) => !s || !this.field.hasPaint(i));
+  }
+
   _pickGlaze(id) {
     const g = GLAZE_BY_ID[id];
     if (!g) return;
-    // find or take a slot
+
+    /* A pot carries three layers, and what used to happen on the fourth
+       was the worst of all the things that could have happened: it took
+       the third slot and said nothing. The paint stayed exactly where it
+       was on the pot — but the layer it lived in now named a different
+       glaze, so every stroke of tenmoku you had laid down quietly became
+       shino. A different colour, a different chemistry, a different
+       maturing temperature, and no way back: the glaze room has no undo.
+
+       So a bucket you only OPENED costs nothing — clicking down the
+       shelf to see what the colours are should be free — and a layer you
+       have actually painted with is not taken away from you. */
     let idx = this.slots.findIndex((s) => s?.id === id);
     if (idx < 0) {
+      const spare = (i) => i >= 0 && this.slots[i] && !this.field.hasPaint(i);
       idx = this.slots.findIndex((s) => !s);
-      if (idx < 0) idx = SLOTS - 1;
+      // then the bucket you are holding, if you have not used it — going
+      // down the shelf reading labels should swap what is in your hand,
+      // not quietly load a fourth, fifth and sixth glaze onto the pot
+      if (idx < 0 && spare(this.slotIndex)) idx = this.slotIndex;
+      if (idx < 0) idx = this.slots.findIndex((s, i) => spare(i));
+      if (idx < 0) {
+        const on = this.slots.filter(Boolean).map((s) => s.name);
+        this.hud.toast(
+          `This pot is already carrying ${on.slice(0, -1).join(', ')} and ${on[on.length - 1]}. `
+          + 'Three is all it can hold.', 'bad', 5200);
+        this.audio.click(0.6, 0.35);
+        // and let the shelf show it, rather than only saying it once
+        this._glazeRoom = false;
+        this.hud.updateGlazeSelection(this.slots[this.slotIndex]?.id, this.slots, false);
+        return;
+      }
       this.slots[idx] = g;
     }
     this.slotIndex = idx;
     this.field.slotIds = this.slots.map((s) => s?.id ?? null);
     applyFireResult(this.mat, null, this.slots);
-    this.hud.updateGlazeSelection(id);
+    this.hud.updateGlazeSelection(id, this.slots, this._glazeRoomLeft());
     this.audio.click(0.9, 0.1);
     this.hud.toast(`${g.name} — ${g.desc}`, '', 4200);
   }
@@ -1725,7 +1762,18 @@ export class Game {
     this._updateToolPoint();
     // reading the whole field is not free; four times a second is plenty
     this._glazeTick = (this._glazeTick ?? 0) + dt;
-    if (this._glazeTick > 0.25) { this._glazeTick = 0; this._updateGlazeCoach(); }
+    if (this._glazeTick > 0.25) {
+      this._glazeTick = 0;
+      this._updateGlazeCoach();
+      // The pot fills up mid-stroke, not when a bucket is chosen, so the
+      // shelf has to notice on its own. Otherwise the first a player
+      // hears of the three-layer limit is being refused.
+      const room = this._glazeRoomLeft();
+      if (room !== this._glazeRoom) {
+        this._glazeRoom = room;
+        this.hud.updateGlazeSelection(this.slots[this.slotIndex]?.id, this.slots, room);
+      }
+    }
     const c = this.clay;
     const u = this.mat.userData.u;
 

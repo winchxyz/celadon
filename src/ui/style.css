@@ -818,3 +818,14 @@ body.grabbing canvas#gl{cursor:none}
    same quiet voice, and unlike those it is always showing: it is the
    only thing in the panel when the Guild has the kiln. */
 .guild-note{ display:block; margin:.2em 0 .9em; }
+
+/* On the pot, and out of layers.
+   A pot carries three glazes and no more, so which three it is carrying
+   has to be visible at a glance — that is the difference between a shelf
+   you are browsing and the choices you have already committed to. And a
+   bucket you cannot reach for is not the same as one you have not earned:
+   .locked means it is not in your shed, .nofit means there is no layer
+   left to put it in. */
+.glaze.loaded{ box-shadow: inset 3px 0 0 var(--celadon); }
+.glaze.loaded .lock{ color:var(--celadon-deep); font-weight:700 }
+.glaze.nofit{ opacity:.45; cursor:not-allowed }

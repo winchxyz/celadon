@@ -110,6 +110,20 @@ export class GlazeField {
 
   idx(i, j) { return (j * GW + i) * 4; }
 
+  /**
+   * Is there any glaze in this layer, or was the bucket only opened?
+   *
+   * The difference matters because a pot carries three layers and no
+   * more. Clicking down the shelf to see what the colours are should
+   * cost nothing; putting a brush to the pot should cost a layer.
+   */
+  hasPaint(slot, eps = 1e-4) {
+    if (slot < 0 || slot > 2) return false;
+    const d = this.data;
+    for (let i = slot; i < d.length; i += 4) if (d[i] > eps) return true;
+    return false;
+  }
+
   /* ---------------- application ---------------- */
 
   /** Brush / sponge a patch of glaze. angle 0..1, arcT 0..1. */

@@ -47,8 +47,28 @@ const hud = {
   setCoach(step, text) { hudLog.coach = text; }, drawSilhouette() {},
   toast(t) { hudLog.toasts.push(String(t).replace(/<[^>]+>/g, '')); },
   openOverlay() {}, closeOverlay() {}, bind() {}, bindAll() {},
-  glazePanel() {}, kilnPanel() {}, updateKilnPanel() {},
+  glazePanel() {}, kilnPanel() {}, updateKilnPanel() {}, updateGlazeSelection() {},
+  setToolTip() {}, _measure() {},
 };
+
+/* Anything else the interface grows.
+   This stub has to answer every call the game makes, and it kept not
+   doing so: one new line in startGlaze took out three unrelated benches
+   at once, none of which was testing the interface at all. A missing
+   method now answers with a no-op rather than a TypeError, so a bench
+   fails only for the reason it was written to fail for. Properties are
+   left alone, so anything a bench actually reads still has to be real. */
+const hudStub = new Proxy(hud, {
+  get(t, k) {
+    if (k in t) return t[k];
+    if (typeof k === 'symbol') return undefined;
+    // only invent functions; an unknown property stays undefined so that
+    // reading one is still an honest mistake
+    return /^(set|show|hide|update|draw|open|close|bind|clear|toggle|select|add|remove)/.test(String(k))
+      ? () => {}
+      : undefined;
+  },
+});
 
 // Built from the game's own numbers, never a second copy of them.
 const camera = new THREE.PerspectiveCamera(
@@ -114,7 +134,7 @@ const studio = { spray: { emit() {} }, update() {}, adapt: () => 1, kilnShelfY: 
 const audio = { resume() {}, click() {}, splash() {}, thud() {}, shatter() {}, chime() {}, ring() {}, setMuted() {}, update() {}, init() {} };
 
 /* ---- drive it ----------------------------------------------------- */
-const game = new Game(eng, studio, hud, audio);
+const game = new Game(eng, studio, hudStub, audio);
 const { COMMISSIONS } = await import('../game/lore.js');
 game.commission = COMMISSIONS[0];
 game.startThrow();

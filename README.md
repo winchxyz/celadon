@@ -21,7 +21,7 @@
 
 <p>
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-3F9C81?style=flat-square"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-18%20passing-3F9C81?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-19%20passing-3F9C81?style=flat-square">
   <img alt="Art assets" src="https://img.shields.io/badge/art%20assets-0-3F9C81?style=flat-square">
   <img alt="Dependencies" src="https://img.shields.io/badge/runtime%20deps-1-3F9C81?style=flat-square">
   <img alt="Sound" src="https://img.shields.io/badge/sound-CC0-3F9C81?style=flat-square">
@@ -66,7 +66,7 @@ nine small CC0 sound recordings — about 140 kB — and it runs without them.
 
 It is already running at **[winchxyz.github.io/celadon](https://winchxyz.github.io/celadon/)** —
 no install, nothing to download. Every push to `master` rebuilds it, and the
-eighteen benches have to pass before it deploys.
+nineteen benches have to pass before it deploys.
 
 To run it locally:
 
@@ -77,7 +77,7 @@ npm run dev      # http://localhost:5180
 
 ```bash
 npm run build && npm run preview   # production bundle
-npm test                           # eighteen headless benches, ~5 s
+npm test                           # nineteen headless benches, ~5 s
 ```
 
 **Requirements:** a browser with WebGL2 and hardware acceleration — recent
@@ -221,6 +221,19 @@ colour of shallow sea water — that colour is called celadon, and it is what
 the game is named for. At ten parts it stops being a colour and becomes a
 depth.
 
+**Twelve glazes, three at a time.** You start with two — Ninth Ash and
+Kingfisher Celadon — and the other ten arrive one per commission, so the
+campaign is also how you fill the shed. In the open shed all twelve are on the
+shelf from the first minute.
+
+A single pot carries **three** of them, because the field below is an RGBA
+texture and its three colour channels are the three coat thicknesses. Opening
+a bucket to see what the colour is costs nothing; painting with it takes a
+layer. Once all three have been used the shelf greys out the rest, and the
+game will not quietly wash one off to make room — the glaze room has no undo,
+so a fourth glaze is refused rather than granted at the expense of work you
+have already done.
+
 Glaze lives in a 2D field wrapped around the pot (192 × 160 cells, three
 layers plus a wax-resist mask). During the firing it is integrated forward in
 time and molten glaze flows downhill at a rate set by `h³ / viscosity` — which
@@ -362,7 +375,7 @@ Most of what makes this game hard to get right is in the simulation, not the
 renderer, so nearly all of it can be tested headlessly.
 
 ```bash
-npm test          # all eighteen, about five seconds
+npm test          # all nineteen, about five seconds
 ```
 
 They fall into four groups.
