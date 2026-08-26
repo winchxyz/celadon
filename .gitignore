@@ -4,5 +4,8 @@ dist/
 
 # scratch files from debugging sessions
 _*.mjs
+probe*.mjs
+sweep.json
+unverified.json
 *.tmp
 shots/
