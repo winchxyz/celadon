@@ -20,6 +20,9 @@
   --top-h:150px;
   --gauge-b:0px;
   --side-w:0px;
+  --side-l:0px;
+  --side-r:0px;
+  --vw:100vw;
   /* the VISIBLE height, published by Hud._measure. On iOS 100vh is
      taller than the screen, so nothing here uses vh for height. */
   --vh:100vh;
@@ -891,11 +894,16 @@ body.grabbing canvas#gl{cursor:none}
    mean something, and that max-width is told how much middle the side
    panels have left it. */
 #coach{
-  position:absolute;left:0;right:0;
+  /* Centred in the gap between the panels, not in the middle of the
+     screen. Anchoring to the edges and subtracting the widest panel
+     twice is correct arithmetic for a screen-centred box and a waste of
+     a window: with only the brief up, the empty right-hand side was
+     reserved for a panel that was not there. */
+  position:absolute;left:var(--side-l);right:var(--side-r);
   margin-inline:auto;width:fit-content;
   bottom:calc(var(--bar-h) + var(--belt-h) + var(--pad)*1.1);
   display:flex;align-items:center;gap:.85em;
-  max-width:min(780px, calc(100vw - 2*var(--side-w) - var(--pad)*2));
+  max-width:min(780px, calc(var(--vw) - var(--side-l) - var(--side-r) - var(--pad)*2));
   padding:.68em 1.35em;border-radius:18px;
   opacity:0;transition:opacity .45s ease;
   pointer-events:none;
@@ -1145,6 +1153,19 @@ body.grabbing canvas#gl{cursor:none}
 #hud.viewing #hud-bottom,
 #hud.viewing #coach,
 #hud.viewing #gauges{display:none !important}
+
+/* Touch targets that a thumb can actually hit.
+   The pedal's bar is 7px tall and the Hide button measured 23 — the
+   control added FOR the tablet complaint, at half the 44pt a thumb
+   needs. The pedal keeps its thin look and gets an invisible hit area
+   around it, because a fat pedal is a different instrument. */
+@media (pointer:coarse){
+  .gauge.pedal .bar{position:relative}
+  .gauge.pedal .bar::after{
+    content:'';position:absolute;left:0;right:0;top:-19px;bottom:-19px;
+  }
+  #bare-toggle{min-height:44px}
+}
 
 /* ---------------- a piece, and its card ---------------- */
 /* The shelf items became buttons so they can be tapped and reached by a

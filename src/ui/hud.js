@@ -236,11 +236,27 @@ export class HUD {
     // How far the side panels reach in from either edge, so that the
     // coach line can be told how much middle is actually left. It is
     // centred, so what binds it is the wider of the two intrusions.
+    /* Each side on its own, because they are not symmetric.
+       This published one number — the WIDER of the two intrusions — and
+       the coach subtracted it twice, which is the right arithmetic for
+       a box centred on the screen and the wrong design. On an iPad Pro
+       upright only the brief is on screen: it reaches 327px in, the
+       right side is empty, and the coach was still given
+       1024 - 654 = 341px and wrapped its sentence onto three lines with
+       half the window beside it doing nothing.
+       With the two edges known separately the line can sit centred in
+       the gap that actually exists instead of in the middle of the
+       glass. */
     const l = box(this.commission);
     const r = box(this.context);
-    const reach = Math.max(l ? Math.round(l.right) : 0,
-                           r ? Math.round(innerWidth - r.left) : 0, 0);
-    s.setProperty('--side-w', `${reach}px`);
+    const left = l ? Math.max(0, Math.round(l.right)) : 0;
+    const right = r ? Math.max(0, Math.round(innerWidth - r.left)) : 0;
+    s.setProperty('--side-l', `${left}px`);
+    s.setProperty('--side-r', `${right}px`);
+    // kept for anything still centring on the screen
+    s.setProperty('--side-w', `${Math.max(left, right)}px`);
+    // vv is the visual viewport, already taken at the top of this method
+    s.setProperty('--vw', `${Math.round(vv ? vv.width : window.innerWidth)}px`);
   }
 
   setKeyHints(pairs) {
