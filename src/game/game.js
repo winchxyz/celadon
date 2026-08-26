@@ -317,7 +317,20 @@ export class Game {
            look at it. One gesture, one job: whatever the first finger
            put on the pot stays there, and Ctrl+Z is still there for
            anyone who wants it back. */
-        if (this.pointer.down) { this.pointer.down = false; this._onRelease(); }
+        /* Cancel a dip that is being aimed, do not commit it.
+           Releasing the first finger is how a dip is COMMITTED — hold
+           to set the line, let go and the pot goes in the bucket — so
+           putting a second finger down to orbit the pot fired the dip
+           at whatever depth the line happened to be at, complete with
+           the splash, before the camera had moved a pixel. Everything
+           else on the belt paints while held and has nothing pending,
+           which is why this line was right for them and wrong for the
+           one tool that does not. */
+        if (this.pointer.down) {
+          this._dipHeld = false;
+          this.pointer.down = false;
+          this._onRelease();
+        }
         this._pinch = this._pinchStart = touchGeometry();
         this._gesture = null;
         this.pointer.right = true;
@@ -927,10 +940,21 @@ export class Game {
    */
   _floorFiring() {
     if (this.firingMode() === 'guild') {
+      /* The brief, and nothing else.
+         this.slots and this.clay are not reset until startThrow, and
+         every caller of this runs before that — so the "glazes on the
+         pot" it was reading were the ones on the pot the player had
+         just sold, and the wall thickness was that pot's wall. A raku
+         cup at 0.24 wall costs 23 to fire and tops the purse to 51; an
+         ash-glazed piece at a 1.0 wall costs 53, and 60 if the brief
+         also wants reduction. Sold one, handed the other, and the kiln
+         cannot be lit — which is the exact dead end this guard exists
+         to prevent, arrived at by the guard itself.
+         The job ahead is described by its brief, so that is what it is
+         measured from, with no clay yet because there is none yet. */
       const wanted = this.commission?.require?.glaze;
-      const on = (this.slots?.filter(Boolean).length ? this.slots.filter(Boolean)
-        : [GLAZE_BY_ID[wanted] ?? GLAZE_BY_ID[this.save.glazes[0]] ?? GLAZES[0]]);
-      return fuelCost(guildSchedule(on, this.clay?.metrics?.() ?? null, this.commission?.require));
+      const on = [GLAZE_BY_ID[wanted] ?? GLAZE_BY_ID[this.save.glazes[0]] ?? GLAZES[0]];
+      return fuelCost(guildSchedule(on, null, this.commission?.require));
     }
     return fuelCost({ ...this.schedule, peak: 900, ramp: 320, soak: 0, reduction: 0, cooling: 'crash' });
   }
@@ -1028,13 +1052,17 @@ export class Game {
   nextCommission() {
     const s = this.save;
     this._boughtClay = false;    // a new job is a new ball
-    this._fuelAdvance();
     if (s.commission < COMMISSIONS.length) {
       this.commission = COMMISSIONS[s.commission];
     } else {
       s.proceduralN++;
       this.commission = proceduralCommission(this.rng, s.proceduralN, s.glazes, s.bodies);
     }
+    /* AFTER the new brief is in hand. The advance exists to guarantee
+       the player can light the kiln for the job they are about to be
+       given, and it was computed before they had been given it — so it
+       sized itself against the commission that had just finished. */
+    this._fuelAdvance();
     this.state = ST.BRIEF;
     this.showBrief();
   }
@@ -1685,6 +1713,11 @@ export class Game {
         }[missing[0]];
         text = how;
       }
+      if (this.clay.nearMax && !this.clay.tooTall) {
+        step = 4;
+        text = 'It is near as tall as wet clay will stand. ' +
+          'Drag <b>sideways, outward</b> to widen it, which also brings the height down.';
+      }
       if (this.clay.tooTall) {
         step = 4;
         text = 'It will not go any higher — there is only so much wet clay will stand. ' +
@@ -1738,6 +1771,15 @@ export class Game {
 
   startTrim() {
     this._clearCoach();
+    /* The throwing snapshots do not survive the drying.
+       The stack is cleared when a throw begins and nowhere else, so
+       every state from the wheel was still on it here — and toLeather()
+       shrinks the body by 4.8% and sets the moisture down to leather.
+       One Ctrl+Z in the trimming room handed back a pot that was wet
+       again and 5% larger, which then finished 5.04% oversize against
+       every dimension in the brief: a 20.0 cm throw ending at 19.24
+       instead of 18.32. Undo belongs to the stage you are in. */
+    this._undoStack = [];
     const c = this.clay;
     c.toLeather();
     this.pb.update(c);

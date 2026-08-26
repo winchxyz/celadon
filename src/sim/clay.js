@@ -39,10 +39,26 @@ export const DRAG_REF = 22.0;
 
 export const W_MIN = 0.085;            // cm — below this the wall tears
 
-/** How deep a turning tool cuts, in cm per second of full contact.
- *  A real trimming pass takes a few hundredths of a centimetre off the
- *  radius in total; this is generous enough to reveal a foot in a few
- *  seconds and nothing like the 2.58 cm a second it used to take. */
+/**
+ * The turning tool's cut, as a coefficient — NOT the cm per second.
+ *
+ * It said cm per second for a long time and it is not: the `rate` it is
+ * multiplied by carries its own factor of 2.4, so full contact takes
+ * 0.22 x 2.4 = 0.53 cm off the radius per second, and the doc, the
+ * name and the line comment at the cut all promised less than half of
+ * that. Anybody tuning trimming by this number was tuning it by a
+ * number the tool does not use.
+ *
+ * The 2.4 is not folded in here because `rate` is shared: the same
+ * value drives `this.ring[i] *= 1 - rate * 0.8`, so moving it would
+ * quietly change how fast throwing rings are turned away as well. The
+ * effective figure is stated instead, and both are true.
+ *
+ * 0.53 cm/s is generous against a real trimming pass, which takes a few
+ * hundredths of a centimetre off the radius in total — but it reveals a
+ * foot in a few seconds, and it is nothing like the 2.58 cm a second
+ * this used to take.
+ */
 export const TRIM_DEPTH = 0.22;
 export const W_CRIT = 0.16;            // cm — danger zone
 export const MAX_H = 46;               // cm — physical ceiling for a thrown pot
@@ -759,7 +775,7 @@ export class Clay {
       const bite = clamp01((this.ro[i] - tr) / 0.55);
       if (bite <= 0) continue;
       const rate = clamp01(press * w * spin * dt * 2.4);
-      // TRIM_DEPTH per second at full contact — a shaving, not a slice
+      // 0.53 cm/s at full contact (TRIM_DEPTH x the 2.4 inside `rate`)
       const cut = TRIM_DEPTH * bite * rate;
       const floorR = Math.max(this.ri[i] + W_MIN * 1.15,
         /* Below the floor ri is 0, so "keep a wall" is no limit at all
@@ -1154,7 +1170,17 @@ export class Clay {
     // --- catastrophic failure ------------------------------------------
     if (isWet) {
       const forgiving = ambient.forgiving === true;
-      this.tooTall = this.height > MAX_H * (forgiving ? 0.92 : 1);
+      /* Two different facts, and they were one flag.
+         The guard that actually stops the wall rising is
+         `this.tooTall && this.height > MAX_H` — it needs the real
+         limit, so the 0.92 never affected it at all. What the 0.92 DID
+         do was trip the coach line, which says "It will not go any
+         higher" in the present tense at 42.3 cm while the pot goes on
+         climbing for another 3.7. A warning that is wrong about the
+         only number it is about teaches the player to ignore it.
+         nearMax is the heads-up. tooTall is the wall. */
+      this.tooTall = this.height > MAX_H;
+      this.nearMax = this.height > MAX_H * (forgiving ? 0.92 : 0.96);
       /* A RATE, not a per-frame total.
          `collapse` is summed over the sections as `over * dt`, so it
          scales with the length of the frame and the threshold did not:

@@ -107,21 +107,22 @@ html,body{
      colour of the shed, instead of a white one. */
   background:#2b3a3a;
   /* On a tablet every one of these is the browser taking a gesture the
-     game needs: without them, a press-and-hold on the pot raises a
-     selection menu over it and a drag bounces the page.
+     game needs. Without touch-action a finger on the clay scrolls the
+     page instead of pulling the wall; without the rest, a press-and-hold
+     on the pot raises a selection menu over it.
 
-     touch-action is NOT among them any more, and it used to be. The
-     effective touch-action for a touch is intersected all the way up
-     the ancestors, so `none` on the body meant none for everything
-     inside it — the kiln schedule, the codex, the gallery and the
-     glaze shelf could not be scrolled with a finger at all, which on a
-     tablet is the same as their lower half not existing. It also was
-     not doing the job it was there for: #gl carries its own
-     touch-action:none, so the canvas, which is the only surface where
-     a stray pan would actually cost the player anything, was already
-     covered. The page itself cannot scroll — html and body are
-     height:100% with overflow:hidden — so there is nothing for a pan
-     outside the canvas to run away with. */
+     This was taken out once, on a report that `none` here disables
+     panning inside every descendant scroller — the kiln schedule, the
+     codex, the gallery, the glaze shelf. It does not. Both engines stop
+     the ancestor walk at the scroller and put panning back:
+     WebKit's StyleAdjuster::computeUsedTouchAction resets to the
+     initial value at any element whose overflow is scroll or auto, and
+     Blink's AdjustTouchActionForElement does the same with a comment
+     saying so in as many words. The panels were always scrollable.
+     Putting it back, because removing it does do something: a pinch
+     starting on a HUD panel is then Safari's to zoom the page with,
+     which is the gesture conflict this line exists to prevent. */
+  touch-action:none;
   overscroll-behavior:none;
   -webkit-user-select:none;user-select:none;
   -webkit-touch-callout:none;
@@ -779,7 +780,15 @@ body.grabbing canvas#gl{cursor:none}
 @media (max-width:900px){
   #commission{display:none}
   #gauges{width:190px;top:calc(var(--vh) * 0.15)}
-  #context{top:calc(var(--vh) * 0.15 + 230px);width:min(300px,40vw)}
+  /* No hardcoded 230px. The base rule stands the panel under whichever
+     of the header and the instruments is lower, MEASURED — --gauge-b is
+     the gauges' own bottom edge and 0 when they are not on screen. This
+     override reintroduced a fixed reservation on top of the gauges'
+     moved position, so with the instruments switched off it held 230px
+     of nothing: at 683x640 the panel came out 168px tall, the shelf got
+     16px of the 161px it needs, and not one of the twelve buckets was
+     fully visible. Only the width is a narrow-window matter. */
+  #context{width:min(300px,40vw)}
   #context.kiln{width:min(340px,46vw)}
   .score-grid{grid-template-columns:1fr}
 }
