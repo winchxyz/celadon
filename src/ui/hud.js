@@ -555,7 +555,12 @@ export class HUD {
       row.dataset.g = g.id;
       row.innerHTML =
         `<span class="sw" style="background:${g.swatch}"></span>` +
-        `<span><span class="gn">${g.name}</span><br><span class="gt">${g.family}</span></span>` +
+        /* No <br>. Both spans are display:block already, so it never did
+           anything except survive `display:none` on the type label —
+           the line break stayed, the empty line box stayed with it, and
+           hiding the label on a short screen reclaimed 16 of the 33
+           pixels it should have. */
+        `<span><span class="gn">${g.name}</span><span class="gt">${g.family}</span></span>` +
         (owned ? `<span class="lock">${Math.round(meltPoint(g))}°</span>` : '<span class="lock">✕</span>');
       row.title = owned ? `${g.desc}` : 'Not yet in your shed.';
       if (owned) row.addEventListener('click', () => onPick(g.id));

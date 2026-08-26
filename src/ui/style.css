@@ -1190,16 +1190,23 @@ body.grabbing canvas#gl{cursor:none}
   .glaze .gt{display:none}
 }
 
-/* Shorter still, and one line each is no longer enough: at 600px tall
-   the panel has 185px and twelve single-line items are 258. Three
-   columns makes it four rows instead of six. The names get tighter and
-   one or two will ellipsis, which is the right thing to lose — a
-   shortened name you can still recognise beats a glaze you cannot see
-   at all. */
+/* The shelf on a short screen: compact the item first, then decide how
+   many columns the width can carry. These were one rule, and it sat
+   after the `max-width:620px` one-column rule and beat it — three
+   columns crammed into a panel the earlier rule says has no room for
+   two. A media query adds no specificity; only position does. Split by
+   width so the two cannot fight, and note that 620 was written when an
+   item was two lines tall: at 21px each, two columns fit a 240px panel
+   comfortably, and one column of twelve does not fit at all. */
 @media (max-height: 680px){
-  .glaze-list{grid-template-columns:1fr 1fr 1fr}
   .glaze{grid-template-columns:14px 1fr;gap:.35em;padding:.16em .3em}
   .glaze .sw{width:14px;height:14px}
   .glaze .gn{font-size:11px}
   .glaze .lock{display:none}
+}
+@media (max-height: 680px) and (min-width: 621px){
+  .glaze-list{grid-template-columns:1fr 1fr 1fr}
+}
+@media (max-height: 680px) and (max-width: 620px){
+  .glaze-list{grid-template-columns:1fr 1fr}
 }
