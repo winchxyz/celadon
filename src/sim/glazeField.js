@@ -348,8 +348,15 @@ export class GlazeField {
 
     for (let j = 1; j < GH; j++) {
       const side = this.mSide[j];
-      // on the inner surface "down" points the other way along the arc
-      const inner = side > 1.5;
+      /* Only the inner wall, not "2 or 3".
+         mSide is 0 outer, 1 rim, 2 inner, 3 BASE, and `> 1.5` swept the
+         base in with the inside — so the one base row that has any
+         downhill component at all (j30, 0.0977, right at the edge of
+         the foot) ran its glaze to j + 1, which is the first row of the
+         OUTER WALL. Glaze at the foot flowed up the pot. It is a single
+         row out of a hundred and sixty, but it is at the foot, which is
+         the one place the firing judges for welding to the shelf. */
+      const inner = side === 2;
       const jTo = inner ? j + 1 : j - 1;
       if (jTo < 0 || jTo >= GH) continue;
       const down = this.mDown[j];
@@ -474,7 +481,15 @@ export class GlazeField {
       for (let i = 0; i < sw; i++) {
         const si = Math.min(GW - 1, Math.round((i / sw) * GW));
         const o = (sj * GW + si) * 4, q = (j * sw + i) * 4;
-        for (let c = 0; c < 4; c++) out[q + c] = Math.round(clamp01(this.data[o + c] / 0.7) * 255);
+        /* The three glaze slots are stored against their 0.7 ceiling;
+           the wax channel is a plain 0..1 and has no such ceiling. Put
+           through the same divisor it saturated: a full resist of 1.0
+           became clamp01(1/0.7) = 1 = 255, and came back as 0.7 — so a
+           reloaded piece let glaze through where the player had waxed
+           it solid. The shelf viewer restores and re-fires from this,
+           so it is what the finished piece is drawn from. */
+        for (let c = 0; c < 3; c++) out[q + c] = Math.round(clamp01(this.data[o + c] / 0.7) * 255);
+        out[q + 3] = Math.round(clamp01(this.data[o + 3]) * 255);
       }
     }
     let s = '';
@@ -493,9 +508,10 @@ export class GlazeField {
         for (let i = 0; i < GW; i++) {
           const si = Math.min(sw - 1, Math.round((i / GW) * sw));
           const q = (sj * sw + si) * 4, o = (j * GW + i) * 4;
-          for (let c = 0; c < 4; c++) {
+          for (let c = 0; c < 3; c++) {
             this.data[o + c] = (bin.charCodeAt(q + c) / 255) * 0.7;
           }
+          this.data[o + 3] = bin.charCodeAt(q + 3) / 255;   // wax is 0..1
         }
       }
       this._push();
