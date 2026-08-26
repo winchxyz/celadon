@@ -12,7 +12,7 @@
 //  actually exists between a tablet and whoever is fixing it.
 // ============================================================
 
-export const BUILD = '2026-08-26.10';
+export const BUILD = '2026-08-26.11';
 
 /**
  * Notice when the server has a newer build than this tab is running.
@@ -95,7 +95,8 @@ export function makeDiag(eng, game, hud) {
         + row('blank frames', w.length, w.length > 0)
         + (w.length
           ? '<div style="margin-top:.6em">' + w.slice(-6).map((f) =>
-            `<div class="bad">${f.kind} at ${f.stage} · ${f.gap}ms gap · ${f.sinceResize} since resize</div>`).join('') + '</div>'
+            `<div class="bad">${f.kind} at ${f.stage} · ${f.gap}ms gap · ${f.sinceResize} since resize`
+            + (f.covering ? `<br>covered by ${f.covering}` : '') + '</div>').join('') + '</div>'
           : '')
         + `<button>Close</button>`;
       el.querySelector('button').addEventListener('click', () => api.toggle(false));

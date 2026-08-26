@@ -25,11 +25,56 @@ function step(p, msg) {
 }
 
 function fail(title, msg) {
+  // The boot plate gets taken out of the document once the game is up
+  // (see retireBootPlate), so a late failure has to put it back rather
+  // than write into an element nobody can see.
+  boot.classList.remove('gone');
+  boot.style.display = '';
+  boot.style.opacity = '1';
+  boot.style.visibility = 'visible';
+  if (!boot.isConnected) document.getElementById('app')?.appendChild(boot);
   boot.innerHTML = `
     <div style="max-width:46ch;text-align:center">
       <div style="font:400 26px/1.3 var(--serif);letter-spacing:.06em;margin-bottom:1em">${title}</div>
       <div style="font:400 13px/1.75 var(--sans);color:var(--ink-dim)">${msg}</div>
     </div>`;
+}
+
+/**
+ * Take the loading screen out of the document, not just out of sight.
+ *
+ * #boot is a full-screen plate of #FBF0DF — cream, which on a lit
+ * display is white — sitting at z-index 40 over everything. It was
+ * dismissed by adding a class that sets opacity 0 and visibility
+ * hidden, and that is all it ever did: the element stayed in the
+ * document, stayed the size of the screen, and stayed one repaint away
+ * from being visible again.
+ *
+ * That is a bad way to hide something bright, because the thing doing
+ * the hiding is a CSS transition, and a CSS transition does not advance
+ * while the document is not being rendered. iOS stops rendering a tab
+ * for all sorts of ordinary reasons — switching apps, switching between
+ * the mobile and desktop version of a site, the task switcher. Come
+ * back and the transition can still be sitting at its first frame with
+ * the plate at full opacity.
+ *
+ * So: fade it for the look of the thing, then remove it. An element
+ * that is not in the document cannot be composited, whatever the
+ * transition believes.
+ */
+function retireBootPlate() {
+  let done = false;
+  const retire = () => {
+    if (done) return;
+    done = true;
+    boot.style.display = 'none';   // first, and synchronously
+    boot.remove();                 // then out of the tree entirely
+  };
+  boot.classList.add('gone');
+  boot.addEventListener('transitionend', retire, { once: true });
+  // and a fallback, because transitionend never fires if the transition
+  // never runs — which is exactly the case this exists for
+  setTimeout(retire, 1400);
 }
 
 async function main() {
@@ -110,7 +155,7 @@ async function main() {
   window.addEventListener('pointerdown', kick, { once: true });
   window.addEventListener('keydown', kick, { once: true });
 
-  setTimeout(() => boot.classList.add('gone'), 260);
+  setTimeout(retireBootPlate, 260);
 
   // ---- loop -------------------------------------------------------
   const blankWatch = makeBlankFrameWatch(eng, game);
@@ -137,13 +182,6 @@ async function main() {
     } catch (e) {
       console.error('celadon: update error', e);
     }
-    try {
-      eng.render(dt);
-      blankWatch.tick();
-      if (diag.open && (frames & 15) === 0) diag.render();
-    } catch (e) {
-      console.error('celadon: draw error', e);
-    }
     // Adaptive quality: if we are consistently slow, shed something.
     //
     // The first rung used to switch off ambient occlusion, but the GTAO
@@ -151,6 +189,19 @@ async function main() {
     // to look photographic — so the branch tested a property that no
     // longer exists, never fired, and a slow machine fell straight to
     // halving the pixel ratio. Antialiasing is the expensive pass now.
+    //
+    // This runs BEFORE the draw, and that ordering is the whole point.
+    // It used to run after, in the same callback, which meant that on
+    // the one frame it decided to act it called setPixelRatio and
+    // resized the drawing buffer AFTER the picture had been rendered
+    // into it. Resizing a drawing buffer clears it. The browser then
+    // composited the cleared buffer, so the frame the game had just
+    // spent its whole budget drawing was thrown away and the screen
+    // showed the clear colour instead — one flat dark frame, arriving
+    // exactly when the frame rate dropped, which is exactly when a
+    // tablet is struggling and exactly when it was reported. Measuring
+    // before drawing costs nothing and the buffer is then stable for
+    // the whole of the render.
     acc += dt; frames++;
     if (acc > 3) {
       const fps = frames / acc;
@@ -163,6 +214,14 @@ async function main() {
         eng.resize();
       }
       acc = 0; frames = 0;
+    }
+
+    try {
+      eng.render(dt);
+      blankWatch.tick();
+      if (diag.open && (frames & 15) === 0) diag.render();
+    } catch (e) {
+      console.error('celadon: draw error', e);
     }
     requestAnimationFrame(frame);
   }

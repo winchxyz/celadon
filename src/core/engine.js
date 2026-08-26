@@ -130,10 +130,25 @@ void main(){
      pass owes the screen: whatever arrives, something finite leaves.
      A NaN fails every comparison, so testing NOT (x >= 0.0) catches it
      where a clamp would pass it straight through. */
-  col = mix(col, vec3(0.0), vec3(
-    !(col.r >= 0.0) ? 1.0 : 0.0,
-    !(col.g >= 0.0) ? 1.0 : 0.0,
-    !(col.b >= 0.0) ? 1.0 : 0.0));
+  /* NOT mix(). Read the paragraph above and then read this line: the
+     guard that replaced the bug was built out of the bug. Metal expands
+     mix(x, y, a) to x + (y - x) * a whatever the weight is, so with
+     col.r = NaN the weight is 1.0 and it computes NaN + (0 - NaN) * 1,
+     which is NaN — the guard passes it straight through. Worse, with
+     col.r = +Inf the weight is 0.0 and it computes Inf + (0 - Inf) * 0,
+     which is Inf + NaN, which is NaN. Fed an infinity, the guard
+     MANUFACTURED the thing it was written to remove.
+
+     A ternary is a select. It moves one of two values and does no
+     arithmetic, so there is no expression for a NaN to grow back out
+     of. It catches NaN, because NaN fails every comparison and so fails
+     >= 0.0; and min() catches the infinities, because min is specified
+     as "y if y < x, otherwise x" and 64.0 < Inf is true. Between them
+     nothing non-finite gets to the screen. */
+  col = vec3(
+    !(col.r >= 0.0) ? 0.0 : col.r,
+    !(col.g >= 0.0) ? 0.0 : col.g,
+    !(col.b >= 0.0) ? 0.0 : col.b);
   gl_FragColor = vec4(min(col, vec3(64.0)), 1.0);
 }
 `,
@@ -385,6 +400,26 @@ export class Engine {
       this._lost = false;
       this._sizedW = this._sizedH = this._sizedDpr = -1;   // force a real resize
       this.resize();
+
+      /* Rebuild the lighting environment, because three cannot.
+         scene.environment is a PMREM render-target texture: its pixels
+         only ever existed on the GPU, and there is no image behind it
+         to re-upload. three's restore path throws away every cached GPU
+         handle and re-uploads textures from their source data, and this
+         one has no source data — WebGLTextures skips render-target
+         textures — so the binding falls back to the 1x1 empty texture
+         and stays there. The room comes back permanently flat and
+         reflection-less, with nothing logged to say why.
+         It is not what made the screen flash, but it is the difference
+         between recovering from a lost context and only appearing to. */
+      try {
+        const old = this.env;
+        this.env = buildEnvironment(renderer);
+        this.scene.environment = this.env;
+        old?.dispose?.();
+      } catch (e) {
+        console.warn('celadon: could not rebuild the lighting environment', e);
+      }
       console.info('celadon: graphics context restored');
     });
   }

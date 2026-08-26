@@ -21,6 +21,56 @@ const EVERY = 20;            // frames between samples
 const DARK = 6;              // 0-255: below this the frame is black
 const BLOWN = 250;           // above this it is white
 
+/**
+ * What is on top of the canvas.
+ *
+ * readPixels returns the canvas's own backing store, and the browser
+ * composites the DOM on top of that afterwards. So an instrument built
+ * only on readPixels is structurally incapable of seeing a white page
+ * element covering the game — it reports a perfectly good frame while
+ * the player looks at a blank screen, and the four-tap readout says
+ * "blank frames 0", which is worse than having no readout at all
+ * because it sends the search in the wrong direction.
+ *
+ * That was not hypothetical. The loading screen was a full-screen plate
+ * of #FBF0DF held at z-index 40 and dismissed only by a CSS transition,
+ * and a CSS transition does not advance while iOS is not rendering the
+ * tab. The one instrument that was supposed to catch it could not see
+ * it by construction.
+ *
+ * So the watcher now also looks at what is stacked over the canvas, and
+ * reports it as its own kind of blank frame.
+ */
+function coveringElement() {
+  const vw = innerWidth, vh = innerHeight;
+  if (!vw || !vh) return null;
+  // hit-test the middle of the screen: the topmost painted thing there
+  const canvas = document.getElementById('gl');
+  const el = document.elementFromPoint(vw >> 1, vh >> 1);
+  for (let e = el; e && e !== document.documentElement; e = e.parentElement) {
+    if (e === canvas) return null;                        // the canvas is on top
+    /* An ancestor of the canvas is BEHIND it, not over it — its
+       background paints under its own children. Walking the parent
+       chain without this test reported #app, the canvas's own
+       container, as the thing covering the canvas. */
+    if (canvas && e.contains(canvas)) return null;
+    const r = e.getBoundingClientRect();
+    if (r.width * r.height < vw * vh * 0.75) continue;     // not full-screen
+    const st = getComputedStyle(e);
+    if (st.visibility === 'hidden' || st.display === 'none') continue;
+    if (+st.opacity < 0.5) continue;
+    const bg = st.backgroundColor, bi = st.backgroundImage;
+    const m = bg.match(/[\d.]+/g);
+    const alpha = m && m[3] !== undefined ? +m[3] : (m ? 1 : 0);
+    if (alpha < 0.5 && (!bi || bi === 'none')) continue;   // paints nothing solid
+    const lum = m ? (+m[0] * 0.2126 + +m[1] * 0.7152 + +m[2] * 0.0722) : null;
+    return { tag: e.tagName + (e.id ? '#' + e.id : ''),
+             cls: typeof e.className === 'string' ? e.className : '',
+             lum: lum === null ? '?' : Math.round(lum), opacity: st.opacity, z: st.zIndex };
+  }
+  return null;
+}
+
 export function makeBlankFrameWatch(eng, game) {
   const gl = eng.renderer.getContext();
   const px = new Uint8Array(N * N * 4);
@@ -57,11 +107,17 @@ export function makeBlankFrameWatch(eng, game) {
       recent.push(Math.round(level));
       if (recent.length > 10) recent.shift();
 
-      const blank = level < DARK ? 'BLACK' : level > BLOWN ? 'WHITE' : null;
+      /* Two independent questions, because there are two ways for the
+         screen to go blank and only one of them is in the framebuffer. */
+      const over = coveringElement();
+      const blank = over ? 'COVERED'
+        : level < DARK ? 'BLACK'
+          : level > BLOWN ? 'WHITE' : null;
       if (!blank) return;
 
       caught.push({
         kind: blank,
+        covering: over ? `${over.tag}${over.cls ? '.' + over.cls.trim().split(/\s+/).join('.') : ''} lum ${over.lum} z ${over.z}` : undefined,
         frame: n,
         brightness: Math.round(level),
         stage: game.state,
