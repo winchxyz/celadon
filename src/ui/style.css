@@ -20,6 +20,9 @@
   --top-h:150px;
   --gauge-b:0px;
   --side-w:0px;
+  /* the VISIBLE height, published by Hud._measure. On iOS 100vh is
+     taller than the screen, so nothing here uses vh for height. */
+  --vh:100vh;
 
   /* Cream plates, cocoa ink. The panels cover more of the screen than
      the pot does and they were a blue-black glass cockpit, which is the
@@ -209,7 +212,7 @@ html,body{
   left:calc(var(--pad)*1.4);
   top:calc(var(--top-h) + var(--pad)*0.6);
   width:min(300px,26vw);
-  max-height:calc(100vh - var(--top-h) - var(--bar-h) - var(--belt-h) - var(--pad)*3);
+  max-height:calc(var(--vh) - var(--top-h) - var(--bar-h) - var(--belt-h) - var(--pad)*3);
   overflow:auto;
 }
 #commission::-webkit-scrollbar{width:4px}
@@ -554,7 +557,7 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radiu
   backdrop-filter:blur(1.5px);
 }
 #ov-inner{
-  width:min(880px,90vw);max-height:88vh;overflow:auto;
+  width:min(880px,90vw);max-height:calc(var(--vh) * 0.88);overflow:auto;
   padding:clamp(26px,3.4vw,52px);
   /* A slab of the same cream the panels are made of. The WebGL clay
      layer sits below the overlay in the stack, so a plate drawn there
@@ -688,8 +691,8 @@ body.grabbing canvas#gl{cursor:none}
    bucket shelf cannot live in. Neither is set here now. */
 @media (max-width:900px){
   #commission{display:none}
-  #gauges{width:190px;top:15vh}
-  #context{top:calc(15vh + 230px);width:min(300px,40vw)}
+  #gauges{width:190px;top:calc(var(--vh) * 0.15)}
+  #context{top:calc(var(--vh) * 0.15 + 230px);width:min(300px,40vw)}
   #context.kiln{width:min(340px,46vw)}
   .score-grid{grid-template-columns:1fr}
 }
@@ -893,4 +896,57 @@ body.grabbing canvas#gl{cursor:none}
 #hud.bare #bare-toggle i{ border-style:dashed; opacity:.5; }
 @media (pointer:coarse){
   #bare-toggle{ padding:.9em 1.15em; font-size:11px; }
+}
+
+/* ============================================================
+   A READOUT YOU CAN SEE ON THE DEVICE.
+   ============================================================
+   "КАК Я БЛЯТЬ ТЕБЕ ПОСМОТРЮ ЧТО ДАЕТ ЧЕРНЫЙ ЭКРАН ЕСЛИ БЛЯТЬ У МЕНЯ
+   НЕТ МАКА А НА АЙПАДЕ Я НЕ МОГУ БЛЯТЬ НИЧЕГО СДЕЛАТЬ" — and that is
+   fair. A web inspector on an iPad needs a Mac and a cable. Telling
+   someone to open a console they cannot open is not a diagnostic, it is
+   a way of not having one.
+   So the readout is in the game. Four taps on the day counter opens it,
+   it says what build is running, what the screen really measures, what
+   the last gesture was taken to be, and every black or white frame it
+   has caught, and it can be screenshotted and sent. */
+#diag{
+  position:absolute; z-index:9; inset:auto var(--pad) var(--pad) var(--pad);
+  max-height:calc(var(--vh) * 0.62); overflow:auto;
+  display:none; padding:1em 1.15em; border-radius:16px;
+  background:#FBF0DFF2; color:var(--ink);
+  font:600 11px/1.65 var(--mono); letter-spacing:.01em;
+  box-shadow:0 4px 0 var(--ash-4), 0 14px 28px rgba(46,33,24,.28);
+  -webkit-overflow-scrolling:touch;
+}
+#diag.on{ display:block; }
+#diag h4{ font:800 10px/1 var(--display); letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-dim); margin:0 0 .7em; }
+#diag b{ color:var(--celadon-deep); }
+#diag .bad{ color:var(--bad-ink); }
+#diag button{
+  margin-top:.9em; padding:.7em 1.1em; border:0; border-radius:12px; cursor:pointer;
+  background:var(--celadon-deep); color:#FBF0DF;
+  font:800 10px/1 var(--display); letter-spacing:.14em; text-transform:uppercase;
+}
+
+/* ============================================================
+   A PANEL THAT SCROLLS HAS TO LOOK LIKE ONE.
+   ============================================================
+   iOS draws no scrollbar until a finger is already on the thing, so a
+   panel with more content below the fold does not read as scrollable.
+   It reads as a panel whose bottom has been cut off — which is exactly
+   how it was reported. A soft edge is the only honest signal available:
+   text that fades out is text that continues.
+   And on a short screen the silhouette gives up some height first, so
+   there is less to hide in the first place. */
+#commission{
+  -webkit-mask-image:linear-gradient(180deg,#000 0,#000 calc(100% - 26px),transparent 100%);
+  mask-image:linear-gradient(180deg,#000 0,#000 calc(100% - 26px),transparent 100%);
+  -webkit-overflow-scrolling:touch;
+}
+@media (max-height:760px){
+  #formview canvas{ max-height:120px; }
+  #com-text{ font-size:11.5px; line-height:1.55; }
+  #com-reqs{ gap:.35em; }
 }

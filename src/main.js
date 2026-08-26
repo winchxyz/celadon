@@ -9,7 +9,8 @@ import { Game } from './game/game.js';
 import { HUD } from './ui/hud.js';
 import { Audio } from './audio/audio.js';
 import { layoutCheck } from './dev/layoutcheck.js';
-import { makeBlackFrameWatch } from './dev/blackframes.js';
+import { makeBlankFrameWatch } from './dev/blackframes.js';
+import { makeDiag, BUILD } from './dev/diag.js';
 
 const boot = document.getElementById('boot');
 const bootBar = document.querySelector('#boot-bar i');
@@ -112,7 +113,10 @@ async function main() {
   setTimeout(() => boot.classList.add('gone'), 260);
 
   // ---- loop -------------------------------------------------------
-  const blackWatch = makeBlackFrameWatch(eng, game);
+  const blankWatch = makeBlankFrameWatch(eng, game);
+  // the readout the player can actually reach: four taps on the day
+  // counter, because an iPad has no console and no cable
+  const diag = makeDiag(eng, game, hud);
   let last = performance.now();
   let acc = 0, frames = 0;
   function frame(now) {
@@ -133,7 +137,8 @@ async function main() {
     }
     try {
       eng.render(dt);
-      blackWatch.tick(dt);
+      blankWatch.tick();
+      if (diag.open && (frames & 15) === 0) diag.render();
     } catch (e) {
       console.error('celadon: draw error', e);
     }
@@ -180,20 +185,22 @@ async function main() {
     pump(n = 1, dt = 1 / 60) {
       for (let i = 0; i < n; i++) { game.update(dt); eng.rig.update(dt); }
       eng.render(dt);
-      // so the black-frame watch can be exercised without a compositor:
+      // so the watch can be exercised without a compositor:
       // requestAnimationFrame does not fire in a pane that is not being
       // displayed, which is where most of this game gets tested
-      blackWatch.tick(dt);
+      blankWatch.tick();
     },
     /** What is sitting on top of what, and what is being cut off.
      *  CELADON.layout({coarse:1}) asks the same with the tablet
      *  stylesheet applied, which is the only place it ever went wrong. */
     layout: layoutCheck,
-    /** Catch a frame that came out black, and say what was true around
-     *  it. Off unless asked for — readPixels stalls the pipeline, and a
-     *  diagnostic that costs frames would be measuring itself. */
-    watchBlackFrames: (v = true) => blackWatch.start(v),
-    blackFrames: () => blackWatch.report(),
+    /** Every blank frame caught, black or white, and what was true
+     *  around it. Always running; also shown in the game itself, since
+     *  the device where this happens has no console. */
+    blankFrames: () => blankWatch.report(),
+    /** The readout, for anyone who does have a console. */
+    diag: (v) => diag.toggle(v),
+    build: BUILD,
   };
 }
 

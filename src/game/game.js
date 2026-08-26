@@ -287,11 +287,17 @@ export class Game {
            while it is still a dab: once a stroke has been running for a
            quarter of a second it is work, and work is not discarded
            because a second finger arrived. */
-        const dab = this.pointer.down
-          && (performance.now() - (this._pressAt ?? 0)) < 250;
+        /* Two fingers move the camera. That is the whole of what they do.
+           They used to also take back the last thing you did, on the
+           theory that the first of the two had probably dabbed the clay
+           on its way to the gesture — and that theory cost people work
+           they meant to keep, on a control they were reaching for to
+           look at it. One gesture, one job: whatever the first finger
+           put on the pot stays there, and Ctrl+Z is still there for
+           anyone who wants it back. */
         if (this.pointer.down) { this.pointer.down = false; this._onRelease(); }
-        if (dab) this.undo?.();
-        this._pinch = touchGeometry();
+        this._pinch = this._pinchStart = touchGeometry();
+        this._gesture = null;
         this.pointer.right = true;
         return true;
       }
@@ -309,18 +315,48 @@ export class Game {
       this._pinch = now;
       if (!was || !now) return true;
 
-      // pinch: the change in spread is the zoom, in the same units the
-      // wheel hands over
       const dSpread = now.spread - was.spread;
-      if (Math.abs(dSpread) > 0.5) this.eng.rig.zoom(-dSpread * 3.2);
-
       const dx = now.cx - was.cx, dy = now.cy - was.cy;
-      if (this.state === ST.GLAZE) {
-        this.pot.rotation.y += dx * BAND_RAD_PER_PX;
-        this._bandV = clamp(dx * BAND_RAD_PER_PX * 22, -BAND_MAX, BAND_MAX);
-        this.eng.rig.orbit(0, dy);
-      } else {
-        this.eng.rig.orbit(dx, dy);
+
+      /* One gesture, one job.
+         This used to zoom, orbit AND turn the pot on the same movement of
+         the same two fingers, all three at once. Nobody pinches
+         symmetrically — the midpoint always drifts — so every attempt to
+         zoom also swung the camera and spun the work, and the three
+         fought each other until it read as none of them happening. It is
+         the same mistake the throwing hand used to make, and it has the
+         same answer: decide what the movement is MOSTLY doing, once, and
+         then do only that for as long as the fingers are down.
+         The decision sticks for the gesture. Re-deciding every frame lets a
+         pinch that drifts flicker between the two. */
+      /* Measured from where the gesture STARTED, not frame to frame.
+         Pointer events arrive one per finger, so in any single event only
+         one of the two has moved — which makes the spread look like it
+         changed even when the hand is travelling flat, and an arbiter
+         reading per-event deltas picks "zoom" every time. Against a fixed
+         reference the two quantities mean what they say: how much wider
+         the fingers are than when they landed, and how far their midpoint
+         has carried. */
+      const from = this._pinchStart;
+      if (from && !this._gesture) {
+        const spreadBy = Math.abs(now.spread - from.spread);
+        const carriedBy = Math.hypot(now.cx - from.cx, now.cy - from.cy);
+        if (spreadBy > 14 || carriedBy > 14) {
+          this._gesture = spreadBy > carriedBy ? 'zoom' : 'drag';
+        }
+      }
+
+      if (this._gesture === 'zoom') {
+        this.eng.rig.zoom(-dSpread * 3.2);
+      } else if (this._gesture === 'drag') {
+        if (this.state === ST.GLAZE) {
+          // in the glaze room the pot turns on its wheel instead
+          this.pot.rotation.y += dx * BAND_RAD_PER_PX;
+          this._bandV = clamp(dx * BAND_RAD_PER_PX * 22, -BAND_MAX, BAND_MAX);
+          this.eng.rig.orbit(0, dy);
+        } else {
+          this.eng.rig.orbit(dx, dy);
+        }
       }
       return true;
     };
@@ -330,6 +366,8 @@ export class Game {
       this._touches.delete(e.pointerId);
       if (this._touches.size < 2) {
         this._pinch = null;
+        this._pinchStart = null;
+        this._gesture = null;
         if (this.pointer.right) {
           this.pointer.right = false;
           if (this.state === ST.GLAZE) {

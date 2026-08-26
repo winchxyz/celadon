@@ -168,6 +168,18 @@ export class HUD {
     const box = (e) => (shown(e) ? e.getBoundingClientRect() : null);
     const h = (e) => { const r = box(e); return r ? Math.round(r.height) : 0; };
 
+    /* The height of the screen, which is not what vh says it is.
+       On iOS Safari 100vh is the LARGE viewport — the page as it would
+       be with the toolbars hidden — so it is taller than what you can
+       actually see, by the height of the toolbar and the tab strip. Any
+       panel sized against it runs off the bottom of the display, and
+       because iOS draws no scrollbar until you touch one, the result
+       does not look like a panel that scrolls. It looks like a panel
+       with its bottom cut off, which is exactly how it was reported.
+       innerHeight is the visible height. Everything that used to be
+       measured in vh is measured against this instead. */
+    s.setProperty('--vh', `${Math.round(window.innerHeight)}px`);
+
     // Along the bottom: the hint bar, and the tool belt standing on it.
     s.setProperty('--bar-h', `${h(this.bottomBar)}px`);
     s.setProperty('--belt-h', `${h(this.toolbar)}px`);
