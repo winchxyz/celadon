@@ -5,3 +5,4 @@ dist/
 # scratch files from debugging sessions
 _*.mjs
 *.tmp
+shots/

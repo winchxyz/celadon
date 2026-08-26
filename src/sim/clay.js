@@ -38,6 +38,12 @@ export const G = 981;                  // cm/s^2
 export const DRAG_REF = 22.0;
 
 export const W_MIN = 0.085;            // cm — below this the wall tears
+
+/** How deep a turning tool cuts, in cm per second of full contact.
+ *  A real trimming pass takes a few hundredths of a centimetre off the
+ *  radius in total; this is generous enough to reveal a foot in a few
+ *  seconds and nothing like the 2.58 cm a second it used to take. */
+export const TRIM_DEPTH = 0.22;
 export const W_CRIT = 0.16;            // cm — danger zone
 export const MAX_H = 46;               // cm — physical ceiling for a thrown pot
 
@@ -483,13 +489,35 @@ export class Clay {
     }
     let did = 0;
     for (let i = k.i0; i <= i1; i++) {
-      if (i < floor) continue;
       const d = this.ymid(i) - ty;
       let w = gauss(d, 1.9);
       if (atRim && d > 0) w = Math.max(w, 0.8);
       if (w < 0.02) continue;
       const wall = this.wall(i);
       const plastic = this.plasticity(i);
+
+      /* The foot.
+         Below the floor there is no wall, only solid clay, and this used
+         to be skipped outright — so the bottom centimetre of every pot
+         was a stub of fixed diameter that no stroke could touch. It read
+         as the control being broken, because next to it the wall flared
+         from 4.1 cm to 6.5 under the same drag while the base sat at
+         4.07 whatever anybody did.
+         A foot does spread under a hand, and the volume looks after
+         itself: V is the invariant here and dy = V / A, so a base pushed
+         wider simply becomes shallower — which is exactly what happens
+         to clay. It answers at a little under half the wall's rate,
+         because a base is thick, compressed and sitting on the wheel. */
+      if (i < floor) {
+        const footRate = clamp01(press * w * spin * plastic * dt * 5.2 * 3.4 * (fromInside ? 1 : 0.5));
+        const reachF = dt * DRAG_REF * 1.25 * w;
+        let dF = clamp((tr - this.ro[i]) * footRate, -reachF, reachF);
+        dF = fromInside ? Math.max(0, dF) : Math.min(0, dF);
+        this.ro[i] = Math.max(0.2, this.ro[i] + dF * 0.45);
+        this._contact(i, press, dt, w);
+        did += w * 0.45;
+        continue;
+      }
       // Bellying out has to be as strong a lever as lifting, or a pot
       // that has grown too tall can never be brought back down and the
       // only advice left is "start again".
@@ -696,20 +724,59 @@ export class Clay {
     return 1;
   }
 
-  /** TRIM — leather-hard only. Cuts clay away from the outside. */
+  /**
+   * TRIM — leather-hard only. Cuts clay away from the outside.
+   *
+   * A turning tool takes a shaving. It does not drive the wall to
+   * wherever your hand is, and that is what this did: the target radius
+   * WAS the cursor radius, so a finger resting on the body of the pot —
+   * not on its edge, which is the only place a mouse pointer naturally
+   * sits and nowhere near where a fingertip lands — read as a radius
+   * deep inside the wall and the whole band was cut down to meet it.
+   * Measured: 2.58 cm of radius and 67 g a second, twenty-one per cent
+   * of the pot per second, and a single 0.35 s flick took 5.7%. Past
+   * about eight pixels inboard of the drawn edge every position gave
+   * the identical saturated cut, so there was no aiming to be done: the
+   * gentle window was four pixels wide on an iPad.
+   *
+   * Now the cut is a DEPTH, taken off the surface that is there, at a
+   * rate a hand can follow — and how far in you hold only decides
+   * whether you are cutting at all, not how much comes off.
+   */
   trim(tr, ty, press, dt, omega) {
     const spin = clamp01(omega / 5);
     if (spin < 0.1) return 0;
-    const k = this._kernel(ty, 0.85);
+    // a narrower tool: sigma 0.85 worked a 5 cm band of an 11 cm pot
+    const k = this._kernel(ty, 0.42);
     let did = 0;
     for (let i = k.i0; i <= k.i1; i++) {
       const d = this.ymid(i) - ty;
-      const w = gauss(d, 0.85);
+      const w = gauss(d, 0.42);
       if (w < 0.02) continue;
+      // the tool has to be AT the wall to cut: outside it, nothing; well
+      // inside it, still only a shaving, because that is what a tool
+      // pressed hard into a turning pot actually takes
+      const bite = clamp01((this.ro[i] - tr) / 0.55);
+      if (bite <= 0) continue;
       const rate = clamp01(press * w * spin * dt * 2.4);
-      const tgt = Math.max(this.ri[i] + W_MIN * 1.15, Math.min(this.ro[i], tr));
+      // TRIM_DEPTH per second at full contact — a shaving, not a slice
+      const cut = TRIM_DEPTH * bite * rate;
+      const floorR = Math.max(this.ri[i] + W_MIN * 1.15,
+        /* Below the floor ri is 0, so "keep a wall" is no limit at all
+           and the base could be turned into a one-millimetre pin — four
+           seconds on the axis took it from 3.4 cm to 0.14 and the pot's
+           whole geometry came apart. A foot ring is about half the
+           widest diameter, and this is measured against THAT rather
+           than against the radius as it stands, which would just ratchet
+           down a little further every frame. */
+        i < this.floorSection() ? this.maxR * 0.42 : 0);
+      const tgt = Math.max(floorR, this.ro[i] - cut);
       const before = Math.PI * (this.ro[i] ** 2 - this.ri[i] ** 2);
-      this.ro[i] = lerp(this.ro[i], tgt, rate);
+      // straight to the target: `cut` is already this frame's shaving,
+      // so easing towards it as well would apply the rate twice — which
+      // it did, and made the tool a hundred times too gentle instead of
+      // a hundred times too fierce
+      this.ro[i] = tgt;
       const after = Math.PI * (this.ro[i] ** 2 - this.ri[i] ** 2);
       // trimming removes clay: shed the volume so height stays put
       this.V[i] *= after / Math.max(1e-6, before);

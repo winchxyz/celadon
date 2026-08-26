@@ -276,9 +276,21 @@ export class Game {
     const onTouchDown = (e) => {
       this._touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this._touches.size === 2) {
-        // undo the press the first finger started
+        /* Two fingers mean "move the camera", and the first of them has
+           usually already landed on the clay. Taking that dab back is
+           right — but it used to call undo() every single time, whether
+           the first finger had touched the pot or not, so a player who
+           simply put two fingers down to look at their work threw away
+           the last thing they had actually done. Two controls on one
+           gesture, and the wrong one won.
+           Only the dab this gesture started is taken back, and only
+           while it is still a dab: once a stroke has been running for a
+           quarter of a second it is work, and work is not discarded
+           because a second finger arrived. */
+        const dab = this.pointer.down
+          && (performance.now() - (this._pressAt ?? 0)) < 250;
         if (this.pointer.down) { this.pointer.down = false; this._onRelease(); }
-        this.undo?.();
+        if (dab) this.undo?.();
         this._pinch = touchGeometry();
         this.pointer.right = true;
         return true;
@@ -1146,6 +1158,8 @@ export class Game {
   }
 
   _onPress() {
+    // when this press began, so a second finger can tell a dab from work
+    this._pressAt = performance.now();
     if (this.state === ST.GLAZE) this._glazeAction(true);
   }
   _onRelease() {
@@ -1752,7 +1766,17 @@ export class Game {
     applyFireResult(this.mat, null, this.slots);
     this.hud.updateGlazeSelection(id, this.slots, this._glazeRoomLeft());
     this.audio.click(0.9, 0.1);
-    this.hud.toast(`${g.name} — ${g.desc}`, '', 4200);
+    /* Say what a glaze is the first time it is picked up, and after that
+       shut up about it. The shelf row is already highlighted, its name
+       and its temperature are already on it, and the description is on
+       the row as a title — repeating all of it across the middle of the
+       screen every single tap is how three paragraphs ended up over the
+       pot in a screenshot. */
+    this._metGlaze = this._metGlaze || new Set();
+    if (!this._metGlaze.has(g.id)) {
+      this._metGlaze.add(g.id);
+      this.hud.toast(`${g.name} — ${g.desc}`, '', 4200);
+    }
   }
 
   /**
@@ -1806,14 +1830,33 @@ export class Game {
     }
   }
 
+  /**
+   * What this tool wants you to do, in the words of the thing you are
+   * holding it with.
+   *
+   * Every one of these named a mouse and a click, on a device that has
+   * neither — "set the line with the mouse, click to lower the pot in",
+   * read off an iPad. Worse than useless: it describes an interaction
+   * that is not available, so a player who follows it exactly gets
+   * nothing and concludes the tool is broken.
+   */
   _glazeHint(tool) {
-    const H = {
-      dip: 'Move the mouse up and down to set the line, then click to lower the pot into the bucket.',
-      pour: 'Click and hold to pour a ribbon down the side facing you.',
+    // guarded: the benches run this in node, where there is no matchMedia
+    const touch = typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
+    const H = touch ? {
+      dip: 'Hold anywhere on the pot and slide up or down to set the line. Let go and it goes in.',
+      pour: 'Hold on the pot to pour a ribbon down the side facing you. The longer you hold, the further it runs.',
       brush: 'Drag to paint. Thin coats break over the edges; thick ones pool and run.',
-      spray: 'Hold to mist the side facing you. Even, but it never reaches inside.',
+      spray: 'Hold to mist the side facing you. Wide and soft, and it never reaches inside.',
       wax: 'Paint wax where you want no glaze at all. The foot, usually.',
-      wipe: 'Click to sponge the foot clean. Do not skip this.',
+      wipe: 'Tap to sponge the foot clean. Do not skip this — glaze on the foot welds the pot to the shelf.',
+    } : {
+      dip: 'Hold the button on the pot and move up or down to set the line. Let go and it goes in.',
+      pour: 'Hold to pour a ribbon down the side facing you. The longer you hold, the further it runs.',
+      brush: 'Drag to paint. Thin coats break over the edges; thick ones pool and run.',
+      spray: 'Hold to mist the side facing you. Wide and soft, and it never reaches inside.',
+      wax: 'Paint wax where you want no glaze at all. The foot, usually.',
+      wipe: 'Click to sponge the foot clean. Do not skip this — glaze on the foot welds the pot to the shelf.',
     };
     if (H[tool]) this.hud.setStage('THE GLAZE ROOM', H[tool]);
   }
@@ -1890,7 +1933,13 @@ export class Game {
         this.field.pour(hAng, GLAZE_TOOLS.pour.widthFrac, slot, this.glazeThickness * dt * 3.4, hit.arcT);
         if (this.rng() < dt * 10) this.audio.splash(0.07);
       } else if (tool === 'spray' && hit.hit) {
-        this.field.spray(hAng, slot, this.glazeThickness * dt * 1.5, GLAZE_TOOLS.spray.spread);
+        /* A mist, not a hose. Two seconds of holding used to put down
+           1236 units of glaze against the brush's 97 for the same two
+           seconds — twelve times as much — and photographed, the pot
+           was uniformly coated from foot to rim before the player had
+           finished pressing. Spray is meant to be the tool you shade
+           with; it was the tool that ended the decision. */
+        this.field.spray(hAng, slot, this.glazeThickness * dt * 0.85, GLAZE_TOOLS.spray.spread);
       }
       this.field.upload();
     }
@@ -1916,14 +1965,32 @@ export class Game {
   }
 
   _glazeAction(down) {
-    if (!down) return;
     const tool = this.hud.tool;
+
+    /* DIP — lower it in, and lift it out.
+       This used to happen on the press, at whatever depth the pointer
+       was already at. With a mouse that reads as "aim, then commit",
+       because the line has been following the cursor for as long as it
+       has been over the pot. A finger has no hover at all — the pointer
+       does not exist until it lands — so on a tablet the pot went into
+       the bucket at the depth of wherever you first touched, instantly,
+       and there was no way to choose. The depth control did not exist.
+       Holding now sets the line and letting go does the dip, which is
+       one gesture that means the same thing under a thumb and under a
+       mouse, and is what your hands do to a pot and a bucket. */
     if (tool === 'dip') {
+      if (down) { this._dipHeld = true; return; }
+      if (!this._dipHeld) return;
+      this._dipHeld = false;
       this.field.dip(clamp01(this._dipFrac ?? 0.8), this.slotIndex, this.glazeThickness);
       this.field.upload();
       this.audio.splash(0.34);
-      this.hud.toast('Dipped.', '', 1500);
-    } else if (tool === 'wipe') {
+      this.hud.toast(`Dipped to ${Math.round(100 * clamp01(this._dipFrac ?? 0.8))}%.`, '', 1500);
+      return;
+    }
+
+    if (!down) return;
+    if (tool === 'wipe') {
       this.field.wipeFoot(0.75);
       this.field.upload();
       this.audio.click(0.7, 0.14);

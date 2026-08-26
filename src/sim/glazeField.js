@@ -490,6 +490,42 @@ export function raycastPot(origin, dir, pb, maxDist = 300) {
   for (let k = 0; k < K; k++) { if (pr[k] > rmax) rmax = pr[k]; if (py[k] > ymax) ymax = py[k]; }
   rmax += 0.4; ymax += 0.4;
 
+  /* ...and it has to actually narrow the march, which it never did.
+     lo and hi stayed 0 and 300 while N is 320, so the ray was sampled
+     every 0.94 units — and the wall of a thrown cup is about 0.6 thick.
+     The near wall is THINNER THAN ONE STEP, so the march stepped clean
+     over it and the first solid it found was the far wall. Every glaze
+     tool then painted the back of the pot: hold a brush against the
+     side facing you and the colour lands where you cannot see it. The
+     three tools reported as "nothing happens" were all doing this.
+     Clipping to where the ray is genuinely near the pot puts those 320
+     samples across about ten units instead of three hundred, which is
+     a step of 0.03 — twenty times finer than the wall it has to find. */
+  {
+    const a = dir.x * dir.x + dir.z * dir.z;
+    const b = 2 * (origin.x * dir.x + origin.z * dir.z);
+    const c = origin.x * origin.x + origin.z * origin.z - rmax * rmax;
+    if (a > 1e-9) {
+      const disc = b * b - 4 * a * c;
+      if (disc < 0) return { hit: false };          // never comes near it
+      const sq = Math.sqrt(disc);
+      lo = Math.max(lo, (-b - sq) / (2 * a));
+      hi = Math.min(hi, (-b + sq) / (2 * a));
+    } else if (c > 0) {
+      return { hit: false };                        // straight down, outside
+    }
+    // and the same for the height band the pot occupies
+    if (Math.abs(dir.y) > 1e-9) {
+      const t1 = (-1 - origin.y) / dir.y, t2 = (ymax - origin.y) / dir.y;
+      lo = Math.max(lo, Math.min(t1, t2));
+      hi = Math.min(hi, Math.max(t1, t2));
+    } else if (origin.y < -1 || origin.y > ymax) {
+      return { hit: false };
+    }
+    lo = Math.max(0, lo);
+    if (hi <= lo) return { hit: false };
+  }
+
   const inside = (r, y) => {
     // even-odd test of (r,y) against the closed meridian polygon
     let c = false;

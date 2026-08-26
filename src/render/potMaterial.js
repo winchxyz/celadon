@@ -465,6 +465,21 @@ if (gtot > 0.002) {
 // ---------------- vitrified bare body ------------------------------
 S.rough = mix(S.rough, S.rough * 0.72, uVitrified * 0.5);
 
+// ---------------- wax resist ---------------------------------------
+// It has to be visible or it is an invisible tool. Wax is read at the
+// top of the glaze block and used for exactly one thing — holding the
+// glaze off — and nothing anywhere gave it an appearance of its own, so
+// painting it onto a bare pot changed not one pixel on screen. It was
+// reported, reasonably, as "WAX — what is it?".
+// It goes on as a milky emulsion and dries to a slightly darker, waxier
+// film, and it burns away in the kiln: so it shows before the firing
+// and never after.
+if (wax > 0.01) {
+  float wv = wax * (1.0 - uFired);
+  S.albedo = mix(S.albedo, S.albedo * 0.80 + vec3(0.035, 0.028, 0.020), wv * 0.85);
+  S.rough  = mix(S.rough, 0.38, wv * 0.75);
+}
+
 // ---------------- soot from the firebox ----------------------------
 if (uSoot > 0.01) {
   float s = fbm(vec2(vAng * 5.0, vArc * 3.0), 3);
@@ -539,12 +554,19 @@ if (uStressView > 0.01) {
     // BRUSH: a spot, which is the one case where a circle was honest.
     d = length(vec2(daCm, dbCm)) / max(uCursor.z, 1e-3);
   }
-  float ring = sstep(1.02, 0.90, d) * sstep(0.60, 0.80, d);
-  // Quietly. It marks where your hand is; it is not meant to be the
-  // brightest thing in the room, and anything emissive here also feeds
-  // the bloom, which is what made it glare over the clay it was
-  // supposed to be pointing at.
-  S.emis += vec3(0.30, 0.78, 0.72) * ring * 0.34 * uCursor.w;
+  /* Thin, and only at the edge.
+     A band from 0.60 to 1.02 is a third of the mark's whole width lit
+     up, and on the two wide shapes that is two bright stripes with the
+     pot between them — a box drawn over the vessel, which is exactly
+     what it was reported as. What the mark has to say is "the edge of
+     what you are about to touch is here", and an edge is a line. */
+  float ring = sstep(1.04, 0.96, d) * sstep(0.86, 0.94, d);
+  // Quietly, and quieter still than before. It marks where your hand is;
+  // it is not meant to be the brightest thing in the room. Photographed
+  // in the glaze room it was outshining the glaze it was pointing at —
+  // a bright ring beside a smudge you could barely see — so a player
+  // reasonably concluded that the ring was all that was happening.
+  S.emis += vec3(0.30, 0.78, 0.72) * ring * 0.20 * uCursor.w;
 }
 
 // ---------------- light that goes IN and comes back out ------------
@@ -679,10 +701,23 @@ export function applyFireResult(mat, result, glazes) {
       continue;
     }
     // raw (unfired) colour: chalky, desaturated, pale
+    /* Raw glaze has to be visible, or every tool in the room looks broken.
+       A wet coat is a chalky, opaque, matt version of the colour — that
+       part was right — but it was desaturated to 42% and lifted to a
+       lightness of at least 0.46, which lands almost exactly on the
+       bisque body underneath (0.79, 0.66, 0.56). Painted on the pot it
+       read as a faint smudge, fainter than the cursor ring pointing at
+       it, and three separate tools were reported as "nothing happens"
+       when what was actually wrong is that you could not see what they
+       had done.
+       And it was the one colour here never converted out of sRGB, while
+       the fired pair beside it are — so it was lighter again than even
+       those numbers intended. */
     const raw = new THREE.Color(g.swatch);
     const hsl = { h: 0, s: 0, l: 0 };
     raw.getHSL(hsl);
-    cR.setHSL(hsl.h, hsl.s * 0.42, Math.min(0.92, hsl.l * 0.55 + 0.46));
+    cR.setHSL(hsl.h, Math.min(1, hsl.s * 0.78), Math.min(0.86, hsl.l * 0.72 + 0.20));
+    cR.convertSRGBToLinear();
 
     if (slot) {
       cA.setRGB(slot.colA[0], slot.colA[1], slot.colA[2]).convertSRGBToLinear();

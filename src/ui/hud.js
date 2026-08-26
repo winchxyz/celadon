@@ -293,7 +293,19 @@ export class HUD {
       b.addEventListener('click', () => this.game.selectTool(t.id));
       this.toolbar.appendChild(b);
     }
-    this.selectTool(selected ?? set[0].id);
+    /* And TELL THE GAME which one it is.
+       selectTool below lights the button and writes hud.tool; the clay
+       reads game.toolId, and nothing connected the two. game.toolId is
+       only ever assigned in the constructor and in startThrow, so the
+       trim stage opened with TURN lit on screen and the throwing HAND
+       still in the player's hand — you dragged expecting to shave a
+       foot and got the full force of a throwing stroke on leather-hard
+       clay. Measured: four short drags took an 11 cm pot to 9.2 cm and
+       its craft score from 83 to 71. Both tools in that stage were
+       reported as doing "какую-то хуйню", and this is why. */
+    const pick = selected ?? set[0].id;
+    if (this.game?.selectTool) this.game.selectTool(pick);
+    else this.selectTool(pick);
     this._measure();   // another toolset is another belt height
   }
 
@@ -727,14 +739,28 @@ export class HUD {
 
   /* ---------------- toasts ---------------- */
 
+  /**
+   * One thing at a time, and never the same thing twice.
+   *
+   * Four of these could stack, each for over four seconds, in the middle
+   * of the screen. Picking three glazes off the shelf — which is one tap
+   * each and the first thing anybody does in the glaze room — put three
+   * paragraphs across the pot, two of them identical, and left them
+   * there. The pot is the thing the player is trying to look at.
+   */
   toast(text, kind = '', ms = 3400) {
+    // already saying exactly this? then it has been said
+    for (const t of this.toasts.children) {
+      if (t.innerHTML === text && !t.classList.contains('out')) return;
+    }
     const t = el('div', `toast ${kind}`, text);
     this.toasts.appendChild(t);
     setTimeout(() => {
       t.classList.add('out');
       setTimeout(() => t.remove(), 520);
     }, ms);
-    while (this.toasts.children.length > 4) this.toasts.firstChild.remove();
+    // two lines under the header is a message; four is a wall
+    while (this.toasts.children.length > 2) this.toasts.firstChild.remove();
   }
 
   /* ---------------- overlay ---------------- */

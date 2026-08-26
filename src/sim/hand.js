@@ -221,7 +221,37 @@ function smooth(e0, e1, x) {
 }
 
 /** Wall radii at a height, straight off the section arrays. */
+/**
+ * The wall the hand is resting against at this height.
+ *
+ * Read straight off the section under the hand, this was wrong at the
+ * bottom of every pot, and wrong in a way that killed one direction of
+ * the control and left the other working.
+ *
+ * Below the floor a section is not a wall, it is solid clay: ri is 0 and
+ * ro is the full radius, so the midpoint between them lands halfway to
+ * the axis. The hand took that as "the middle of the wall", and shape()
+ * carries the wall middle TO where the hand asks — so the target for a
+ * push outward came out two centimetres BEHIND the wall that was
+ * actually there. `dr = max(0, target - mid)` is then zero and bellying
+ * the foot out did nothing at all, while collaring it in, which takes
+ * min(0, ...), worked perfectly. Measured on a 9.7 cm cup: a sideways
+ * stroke at 0.5 cm moved 7.5 against 200 at 2.9 cm, and the pot's
+ * bottom centimetre could be squeezed but never widened.
+ *
+ * So when the hand is on solid clay it takes its reference from the
+ * nearest section that is genuinely wall, which is the one its stroke
+ * is going to move anyway.
+ */
 export function radiiAt(c, y) {
-  const i = c.sectionAt(clamp(y, 0, Math.max(0.01, c.height - 1e-4)));
+  const top = Math.max(0.01, c.height - 1e-4);
+  let i = c.sectionAt(clamp(y, 0, top));
+  if (!c.isWall(i)) {
+    const floor = c.floorSection();
+    const NS = c.ro.length;
+    for (let j = Math.max(i, floor); j < NS; j++) {
+      if (c.isWall(j)) { i = j; break; }
+    }
+  }
   return { ro: c.ro[i], ri: c.ri[i] };
 }
