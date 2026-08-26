@@ -1014,6 +1014,13 @@ body.grabbing canvas#gl{cursor:none}
   font:600 11px/1.65 var(--mono); letter-spacing:.01em;
   box-shadow:0 4px 0 var(--ash-4), 0 14px 28px rgba(46,33,24,.28);
   -webkit-overflow-scrolling:touch;
+  /* #hud is pointer-events:none and hands it back only to .panel, nav,
+     button and .clickable — and this is none of those, so the one
+     instrument a player with no console can reach could not be
+     scrolled. Its own Close button worked, because that IS a button;
+     everything above the fold, which is where the blank-frame rows
+     they were asked to photograph appear, could not be reached. */
+  pointer-events:auto;
 }
 #diag.on{ display:block; }
 #diag h4{ font:800 10px/1 var(--display); letter-spacing:.16em; text-transform:uppercase;
@@ -1042,7 +1049,16 @@ body.grabbing canvas#gl{cursor:none}
   -webkit-overflow-scrolling:touch;
 }
 @media (max-height:760px){
-  #formview canvas{ max-height:120px; }
+  /* Shorter, and still the right shape.
+     `max-height` alone caps the height of a canvas whose width is
+     100%, so the drawing is squashed: measured 306x120 against an
+     intrinsic 480x330, an aspect of 2.55 where it should be 1.455 —
+     43% flat. The silhouette is the picture of the shape the brief is
+     asking for, and the player is matching a pot against it by eye. A
+     smaller one saves the height this rule is for; a distorted one
+     tells them to throw something the brief does not want.
+     width:auto lets it scale from the height instead. */
+  #formview canvas{ max-height:140px; width:auto; max-width:100%; margin:0 auto; }
   #com-text{ font-size:11.5px; line-height:1.55; }
   #com-reqs{ gap:.35em; }
 }
