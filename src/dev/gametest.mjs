@@ -212,7 +212,12 @@ check('the coach says something', !!hudLog.coach, `"${(hudLog.coach || '').slice
   const said = [];
   const grab = () => { game._glazeCoachText = null; game._updateGlazeCoach(); return hudLog.coach || ''; };
   said.push(grab());                                  // nothing on it yet
-  game.field.dip(0.92, game.slotIndex, 1.1);
+  // the coat the game's own dial opens at. This used to be 1.1 — nearly
+  // four times the slider's MAXIMUM of 0.30, a thickness no player can
+  // reach — and once the coach learned to say "that coat is heavy" in
+  // units the game actually produces, this walk-through was the only
+  // thing in the game still able to trigger it.
+  game.field.dip(0.92, game.slotIndex, 0.13);
   game.field.upload();
   said.push(grab());                                  // now it is covered
   game.field.wipeFoot(0.7);

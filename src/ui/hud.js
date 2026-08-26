@@ -496,8 +496,17 @@ export class HUD {
     const t = el('div', 'slider-row');
     t.innerHTML = `<label>COAT THICKNESS <span id="gth">${fmt(state.thickness * 10, 2)} mm</span></label>`;
     const inp = el('input');
-    inp.type = 'range'; inp.min = '0.04'; inp.max = '0.30'; inp.step = '0.005';
-    inp.value = String(state.thickness);
+    inp.type = 'range'; inp.min = '0.04'; inp.step = '0.005';
+    /* The top of this slider used to be lethal.
+       Eleven of the twelve glazes weld the pot to the kiln shelf
+       somewhere inside 0.04-0.30, and Zinc Flower does it at 0.125 —
+       below the 0.13 the slider opens at. A guided mode must not offer
+       a setting that destroys the pot, so in guided mode the track stops
+       where this glaze starts to run. Firing it by hand gives the whole
+       range back, along with every other way to lose it. */
+    const cap = state.safeCoat ?? 0.30;
+    inp.max = String(state.guided ? Math.max(0.06, cap) : 0.30);
+    inp.value = String(Math.min(state.thickness, parseFloat(inp.max)));
     inp.addEventListener('input', () => {
       $('#gth').textContent = `${fmt(parseFloat(inp.value) * 10, 2)} mm`;
       onThick(parseFloat(inp.value));
@@ -506,7 +515,9 @@ export class HUD {
     c.appendChild(t);
 
     c.appendChild(el('div', 'readout',
-      'Thin coats break over edges.<br>Thick coats run, and crawl.'));
+      state.guided
+        ? `Thin coats break over edges. This one runs off the pot past <b>${fmt(cap * 10, 2)} mm</b>, so the slider stops there.`
+        : 'Thin coats break over edges.<br>Thick coats run, and crawl.'));
   }
 
   /**
@@ -520,6 +531,26 @@ export class HUD {
    * It used to match rows by reading their displayed name back out of
    * the DOM, which is one renamed glaze away from selecting nothing.
    */
+  /**
+   * Move the coat dial's ceiling when the glaze under it changes.
+   * A stiff glaze can carry twice what a runny one can, and the dial has
+   * to say so at the moment the bucket is chosen rather than after the
+   * kiln has been opened.
+   */
+  setCoatCeiling(cap, value) {
+    const inp = this.context?.querySelector('input[type=range]');
+    if (!inp) return;
+    inp.max = String(Math.max(0.06, cap));
+    inp.value = String(Math.min(value, parseFloat(inp.max)));
+    const out = $('#gth');
+    if (out) out.textContent = `${fmt(parseFloat(inp.value) * 10, 2)} mm`;
+    const read = this.context.querySelector('.readout');
+    if (read) {
+      read.innerHTML = `Thin coats break over edges. This one runs off the pot past `
+        + `<b>${fmt(cap * 10, 2)} mm</b>, so the slider stops there.`;
+    }
+  }
+
   updateGlazeSelection(id, slots = null, roomLeft = true) {
     const on = slots ? slots.filter(Boolean).map((s) => s.id) : null;
     for (const row of this.context.querySelectorAll('.glaze')) {

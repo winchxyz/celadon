@@ -10,7 +10,7 @@ import { potGeometry, ProfileBuffer, proportions } from '../render/potMesh.js';
 import { createPotMaterial, applyFireResult } from '../render/potMaterial.js';
 import { GlazeField, raycastPot } from '../sim/glazeField.js';
 import {
-  GLAZES, GLAZE_BY_ID, SLOTS, defaultSchedule, guildSchedule, fire as fireGlaze, fuelCost,
+  GLAZES, GLAZE_BY_ID, SLOTS, defaultSchedule, guildSchedule, safeCoat, fire as fireGlaze, fuelCost,
   kilnCurve, scheduleHours, COOLING, meltPoint, maturePoint,
 } from '../sim/glaze.js';
 import { COMMISSIONS, FORMS, BODIES, rankFor, OPENING, CODEX, proceduralCommission, targetSize } from './lore.js';
@@ -1705,10 +1705,22 @@ export class Game {
       ['SHIFT+SCROLL', 'zoom'], ['1-6', 'tools'], ['ENTER', 'to the kiln'],
     ]);
     this.hud.glazePanel(
-      { glazes: this.free ? this._freeGlazes() : this.save.glazes, slot: this.slots[0]?.id, thickness: this.glazeThickness },
+      {
+        glazes: this.free ? this._freeGlazes() : this.save.glazes,
+        slot: this.slots[0]?.id,
+        thickness: this.glazeThickness,
+        // guided mode does not offer a coat that welds the pot to the shelf
+        guided: this.firingMode() === 'guild',
+        safeCoat: this.coatCeiling(this.slots[0]),
+      },
       (id) => this._pickGlaze(id),
       (v) => { this.glazeThickness = v; },
     );
+    // ...and the coat already on the dial has to obey the same ceiling,
+    // because Zinc Flower's is below the value the dial opens at
+    if (this.firingMode() === 'guild') {
+      this.glazeThickness = Math.min(this.glazeThickness, this.coatCeiling(this.slots[0]));
+    }
     // mark the one bucket already open, so the shelf reads correctly
     // before the player has touched anything
     this._glazeRoom = this._glazeRoomLeft();
@@ -1777,6 +1789,20 @@ export class Game {
       this._metGlaze.add(g.id);
       this.hud.toast(`${g.name} — ${g.desc}`, '', 4200);
     }
+
+    /* Each glaze runs at its own thickness, and some of them run at a
+       thinner coat than the dial opens at. Picking one has to bring the
+       dial with it, or choosing Zinc Flower quietly arms a coat that
+       welds the pot to the shelf. */
+    if (this.firingMode() === 'guild') {
+      const cap = this.coatCeiling(g);
+      if (this.glazeThickness > cap) {
+        this.glazeThickness = cap;
+        this.hud.toast(
+          `${g.name} runs easily — the coat is held at ${(cap * 10).toFixed(2)} mm.`, '', 3200);
+      }
+      this.hud.setCoatCeiling?.(cap, this.glazeThickness);
+    }
   }
 
   /**
@@ -1798,28 +1824,40 @@ export class Game {
     const cur = this.slots[this.slotIndex];
     const dom = gs.meanThick.indexOf(Math.max(...gs.meanThick));
     const thick = gs.meanThick[dom] ?? 0;
+    const safe = this.safeCoat(this.slots[dom] ?? cur);
 
     let step = 1, text;
     if (req.glaze && cur && cur.id !== req.glaze) {
       text = `This one is to be glazed in <b>${glazeName(req.glaze)}</b>. Choose it on the right before you put anything on — what is underneath still shows.`;
     } else if (cover < 0.02) {
       step = 2;
-      text = 'Nothing on it yet. <b>Dip</b> is the evenest coat there is: move the mouse to set the line, then click to lower it in.';
+      text = this._touchUI()
+        ? 'Nothing on it yet. <b>Dip</b> is the evenest coat there is: hold on the pot, slide to set the line, let go.'
+        : 'Nothing on it yet. <b>Dip</b> is the evenest coat there is: hold the button on the pot, move to set the line, let go.';
     } else if (cover < 0.55) {
       step = 3;
-      text = `<b>${Math.round(cover * 100)}%</b> covered. Bare bisque comes out of the fire bare — <b>drag with the right button</b> to turn the pot and get at the other side.`;
+      text = `<b>${Math.round(cover * 100)}%</b> covered. Bare bisque comes out of the fire bare — `
+        + `${this._touchUI() ? '<b>two fingers</b>' : '<b>drag with the right button</b>'} to turn the pot and get at the other side.`;
     } else if (cover < 0.88) {
       step = 3;
       text = `<b>${Math.round(cover * 100)}%</b> covered. Look for the misses where the pot turns away from you.`;
-    } else if (thick < 0.55) {
+    } else if (thick > safe) {
+      /* The two thresholds here used to be 0.55 and 1.9, against a
+         number measured in centimetres that the coat slider can only
+         drive between 0.038 and 0.286. So EVERY coat was "thin — raise
+         the thickness" and none was ever "heavy": the only advice the
+         game could give was to add more glaze, and adding more glaze is
+         what welds the pot to the shelf. They are measured against what
+         THIS glaze can actually carry now. */
       step = 4;
-      text = 'Covered, but the coat is <b>thin</b> — thin glaze goes dry and patchy over an edge. Another pass, or raise the thickness.';
-    } else if (thick > 1.9) {
+      text = 'That coat is <b>heavy</b>. Any more and it will run off the foot and weld the pot to the shelf.';
+    } else if (thick < safe * 0.34) {
       step = 4;
-      text = 'That coat is <b>heavy</b>. Thick glaze runs off the pot and onto the shelf. Sponge some back, or fire it cooler.';
+      text = 'Covered, but the coat is <b>thin</b> — thin glaze goes dry and patchy over an edge. Another pass.';
     } else if (foot < 0.6) {
       step = 5;
-      text = 'Now <b>wipe the foot</b>. Glaze on the foot welds the pot to the shelf in the fire and you lose both.';
+      text = 'Now <b>wipe the foot</b> — the sponge, last on the belt. Molten glaze runs downward, and any that '
+        + 'reaches the bottom glues the pot to the kiln shelf. It comes off the shelf in pieces.';
     } else {
       step = 6;
       text = `Covered${gs.evenness > 0.6 ? ' and even' : ''}, foot clean. <b>To the kiln.</b>`;
@@ -2050,6 +2088,47 @@ export class Game {
 
   /** 'guild' or 'hand'. Guild unless the player has said otherwise. */
   firingMode() { return this.save.settings.firing === 'hand' ? 'hand' : 'guild'; }
+
+  /** Is a finger driving this? The benches run headless, where asking is fatal. */
+  _touchUI() {
+    return typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
+  }
+
+  /**
+   * The thickest coat of this glaze that survives the firing it is going
+   * to get. Cached: the answer only moves when the glaze or the brief
+   * does, and working it out bisects against the real fire().
+   *
+   * This exists because the coat slider runs to 0.30 and eleven of the
+   * twelve glazes weld the pot to the shelf somewhere inside that — Zinc
+   * Flower at 0.125, which is UNDER the 0.13 the slider starts at. The
+   * crystal glaze that commission c7 asks for by name was destroyed at
+   * the factory default, in the mode that promises the pot comes out
+   * fired.
+   */
+  safeCoat(glaze = this.slots[this.slotIndex]) {
+    if (!glaze) return 0.30;
+    const key = `${glaze.id}|${this.commission?.require?.effect ?? ''}|${this.commission?.require?.atmos ?? ''}`;
+    this._safeCoats = this._safeCoats || new Map();
+    if (!this._safeCoats.has(key)) {
+      this._safeCoats.set(key,
+        safeCoat(glaze, this.clay ? this.clay.metrics() : null, this.commission?.require));
+    }
+    return this._safeCoats.get(key);
+  }
+
+  /**
+   * Where the coat dial stops, which is a little under the true limit.
+   *
+   * A dip beads where the pot came out of the bucket and lays down about
+   * three per cent more than the number on the dial. Without the margin,
+   * setting the dial to its own maximum and dipping once puts the coat
+   * just past safe and the coach immediately calls it heavy — which
+   * makes the ceiling a liar about the one thing it exists to promise.
+   */
+  coatCeiling(glaze = this.slots[this.slotIndex]) {
+    return Math.max(0.04, 0.88 * this.safeCoat(glaze));
+  }
 
   /**
    * Hand the kiln to the Guild: the schedule that fires the glazes that

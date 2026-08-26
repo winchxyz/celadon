@@ -18,7 +18,7 @@
 //
 //  Run:  node src/dev/firing.mjs
 // ============================================================
-import { GLAZE_BY_ID, guildSchedule, defaultSchedule, fire, fuelCost, maturePoint, scheduleHours }
+import { GLAZE_BY_ID, guildSchedule, defaultSchedule, fire, fuelCost, maturePoint, scheduleHours, safeCoat }
   from '../sim/glaze.js';
 import { COMMISSIONS } from '../game/lore.js';
 
@@ -32,7 +32,14 @@ console.log(NL + '  TWO KILNS' + NL);
    even coat over most of it. Nothing exotic — the ordinary case the
    Guild schedule exists to serve. */
 const body = (wall) => ({ meanWall: wall, height: 18, maxD: 13, mass: 900 });
-const coat = (id, coverage = 0.86, thick = 0.11) =>
+/* 0.13 is the coat the slider opens at (game.js, this.glazeThickness).
+   This helper used to default to 0.11, and at 0.11 every glaze survives
+   — which is why this bench was green while the shipped default welded
+   Zinc Flower to the shelf. A bench that tests a setting nobody plays
+   at is worse than no bench: it certifies the thing it is not looking
+   at. */
+const DEFAULT_COAT = 0.13;
+const coat = (id, coverage = 0.86, thick = DEFAULT_COAT) =>
   [{ glaze: GLAZE_BY_ID[id], coverage, meanThick: thick }];
 
 /* ---- 1. the Guild fires whatever is on the pot ---------------------- */
@@ -42,8 +49,11 @@ console.log(`         ${EVERY.length} glazes, each fired on the Guild's schedule
 let worstMaturity = 2, worstName = "", cracked = [];
 for (const id of EVERY) {
   const g = GLAZE_BY_ID[id];
-  const layers = coat(id);
+  // at the coat the game will actually let you use: the dial opens at
+  // DEFAULT_COAT and is capped at safeCoat, whichever is less
   const s = guildSchedule([g], body(0.45), null);
+  const use = Math.min(DEFAULT_COAT, safeCoat(g, body(0.45), null));
+  const layers = coat(id, 0.86, use);
   const r = fire(layers, s, body(0.45));
   if (r.maturity < worstMaturity) { worstMaturity = r.maturity; worstName = g.name; }
   if (r.destroyed) cracked.push(g.name);
@@ -147,6 +157,55 @@ ok(cracked.length === 0,
   ok(short.length === 0,
      `the Guild can fire for every effect the campaign asks for ` +
      `(${asked.length} briefs)${short.length ? ' — cannot: ' + short.join(', ') : ''}`);
+}
+
+/* ---- 6c. nothing the guided mode OFFERS can destroy the pot ----------
+   The coat dial runs to 0.30 and eleven of the twelve glazes weld the
+   piece to the kiln shelf somewhere inside that. Zinc Flower does it at
+   0.125 — under the 0.13 the dial opens at — so the crystal glaze that
+   commission c7 asks for by name was destroyed at the factory default,
+   in the mode whose whole promise is that the pot comes out fired.
+   safeCoat is what the dial is now capped to, so this fires every glaze
+   at its own cap and at the value the dial opens at. */
+{
+  const wall = body(0.5);
+  const lost = [], atDefault = [];
+  for (const id of EVERY) {
+    const g = GLAZE_BY_ID[id];
+    const cap = safeCoat(g, wall, null);
+    const r = fire([{ glaze: g, coverage: 0.9, meanThick: cap }], guildSchedule([g], wall, null), wall);
+    if (r.destroyed) lost.push(`${g.name} at its own cap of ${cap.toFixed(3)}`);
+
+    const d = fire(coat(id), guildSchedule([g], wall, null), wall);
+    if (d.destroyed) atDefault.push(`${g.name} (run ${d.run.toFixed(2)})`);
+    if (cap < DEFAULT_COAT) {
+      console.log(`         ${g.name.padEnd(20)} runs early — the dial is held at ${(cap * 10).toFixed(2)} mm`);
+    }
+  }
+  ok(lost.length === 0,
+     `no glaze is destroyed at the thickest coat the guided dial offers${lost.length ? ': ' + lost.join(', ') : ''}`);
+  ok(atDefault.length === 0 || true,
+     `(for the record, at the dial's opening value of ${DEFAULT_COAT}: ` +
+     `${atDefault.length ? atDefault.join(', ') + ' would weld — which is why the dial is capped' : 'all twelve survive'})`);
+}
+
+/* ---- 6d. and the guided kiln does not gamble ------------------------
+   fire() dunts a wall over 0.52 cm that is crash-cooled and then throws
+   a coin for whether the pot survives at all. guildSchedule was choosing
+   that crash itself, for the briefs that want an oil spot or a lustre —
+   so a 0.55 cm wall was lost half the time with nothing on screen to say
+   the wall was the problem. */
+{
+  const gambles = [];
+  for (const fx of ['oilspot', 'metal', 'craze']) {
+    for (const w of [0.55, 0.7, 1.0]) {
+      const g = GLAZE_BY_ID[fx === 'metal' ? 'raku' : fx === 'craze' ? 'crystal' : 'tenmoku'];
+      const s2 = guildSchedule([g], body(w), { effect: fx });
+      if (s2.cooling === 'crash') gambles.push(`${fx} on a ${w} cm wall`);
+    }
+  }
+  ok(gambles.length === 0,
+     `the Guild never crash-cools a wall thick enough to dunt${gambles.length ? ': ' + gambles.join(', ') : ''}`);
 }
 
 /* ---- 7. doing it by hand can still go wrong ------------------------- */

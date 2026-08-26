@@ -339,6 +339,17 @@ export function guildSchedule(glazes, body, req) {
   s.cooling = 'normal';
   s.holdHrs = 0;
 
+  /* A wall this heavy must not be crash-cooled.
+     fire() dunts a piece thicker than 0.52 cm that is dropped fast, and
+     then throws a coin for whether it survives — and it was the GUILD
+     that chose the crash, for the briefs that want an oil spot or a
+     lustre. A guided mode does not get to gamble with the pot: measured
+     over four thousand firings, a 0.55 cm wall was lost half the time,
+     with nothing on screen to say the wall was the problem. Where the
+     wall cannot take it, the kiln comes down normally and the effect is
+     weaker. That is a worse pot, not a lost one. */
+  const heavyWall = (body?.meanWall ?? 0.4) > 0.52;
+
   /* And it fires for what it has been asked to produce.
      Pinning the schedule to the maturing point makes a glaze into a
      glass, which is what most briefs want and is why this exists. It is
@@ -363,10 +374,12 @@ export function guildSchedule(glazes, body, req) {
       // iron boiled out of the melt above maturity and frozen where it
       // surfaced, so the kiln has to be taken over and then shut down
       s.peak = Math.round(Math.max(s.peak, req.minPeak ?? s.peak + 45));
-      s.cooling = 'crash'; starve(0.85);
+      if (!heavyWall) s.cooling = 'crash';
+      starve(0.85);
       break;
     case 'metal':
-      s.cooling = 'crash'; starve(0.85);
+      if (!heavyWall) s.cooling = 'crash';
+      starve(0.85);
       break;
     case 'carbon':
       // there is no carbon to trap in a kiln that is being fed: the
@@ -374,7 +387,7 @@ export function guildSchedule(glazes, body, req) {
       starve(0.8);
       break;
     case 'craze':
-      s.cooling = 'crash';
+      if (!heavyWall) s.cooling = 'crash';
       break;
     default:
       break;
@@ -403,6 +416,39 @@ export const EFFECTS_FOR = {
   raku: ['metal', 'craze'],
   oxblood: ['copperRed'],
 };
+
+/**
+ * The thickest coat of this glaze that will still be on the pot when the
+ * kiln is opened.
+ *
+ * A glaze runs as roughly the 2.2 power of its own thickness, and past a
+ * total run of 3.4 fire() welds the piece to the shelf and destroys it.
+ * That threshold sits INSIDE the coat-thickness slider for eleven of the
+ * twelve glazes, and for Zinc Flower it sits at 0.125 — below the 0.13
+ * the slider starts at. So the crystal glaze, which commission c7
+ * requires by name, was destroyed at the factory default, in the mode
+ * whose whole promise is that the pot comes out fired.
+ *
+ * Bisected against the real fire() rather than an approximation of it,
+ * because the thing that must not be wrong here is the agreement between
+ * this number and what the kiln actually does. It is called when the
+ * glaze or the schedule changes, not per frame.
+ */
+export function safeCoat(glaze, body, req, target = 2.6) {
+  if (!glaze) return 0.30;
+  const s = guildSchedule([glaze], body, req);
+  const runAt = (t) => {
+    const r = fire([{ glaze, coverage: 0.9, meanThick: t }], s, body);
+    return r.destroyed ? 99 : r.run;
+  };
+  let lo = 0.04, hi = 0.30;
+  if (runAt(hi) <= target) return hi;
+  for (let i = 0; i < 14; i++) {
+    const mid = (lo + hi) * 0.5;
+    if (runAt(mid) <= target) lo = mid; else hi = mid;
+  }
+  return Math.max(0.04, Math.round(lo * 200) / 200);   // to the slider's step
+}
 
 export function scheduleHours(s) {
   const ramp = Math.max(1, s.peak - 20) / Math.max(30, s.ramp);
