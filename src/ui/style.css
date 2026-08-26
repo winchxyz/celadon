@@ -1098,10 +1098,17 @@ body.grabbing canvas#gl{cursor:none}
 }
 
 /* Looking at a finished piece: the room stays, the workbench does not. */
+/* The ids here have to be the ids that exist. Two of these were
+   invented — #toolbar and #bottom-bar — so the tool belt and the hint
+   bar stayed on screen over a finished piece, and the test that was
+   supposed to catch it asked getElementById for a name nothing has and
+   read the null back as "hidden". They are #tools and #hud-bottom. */
 #hud.viewing #context,
 #hud.viewing #commission,
-#hud.viewing #toolbar,
-#hud.viewing #bottom-bar{display:none !important}
+#hud.viewing #tools,
+#hud.viewing #hud-bottom,
+#hud.viewing #coach,
+#hud.viewing #gauges{display:none !important}
 
 /* ---------------- a piece, and its card ---------------- */
 /* The shelf items became buttons so they can be tapped and reached by a

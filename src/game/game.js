@@ -2637,6 +2637,17 @@ export class Game {
    */
   showPiece(p, back) {
     if (!p || !p.clay) { back(); return; }
+    /* Everything the viewer is about to overwrite, put somewhere safe.
+       dressPot rebuilds the profile buffer and the glaze field in
+       place, because those are the only ones there are — and the shelf
+       is reachable from the pause menu, so it can be opened in the
+       middle of glazing a pot. Without this, looking at an old piece
+       silently replaced the wet one on the wheel and the glaze the
+       player had spent the whole phase putting on it. The field is
+       copied raw rather than through snapshot(), which downsamples
+       192x160 to 64x48 and would hand back a blurred version of their
+       work. */
+    this._stash = this._stashPot();
     this._viewing = p;
     /* The soft overlay deliberately leaves the room visible, which is
        the point — but it leaves the working panels visible too, and a
@@ -2678,6 +2689,8 @@ export class Game {
       this.audio.click();
       this._viewing = null;
       document.getElementById('hud')?.classList.remove('viewing');
+      this._restorePot(this._stash);
+      this._stash = null;
       back();
     });
     this.hud.bind('[data-a="card"]', () => { this.audio.click(); this.showCard(p, () => this.showPiece(p, back)); });
@@ -2740,6 +2753,38 @@ export class Game {
       else if (how === 'failed') this.hud.toast('Could not make the picture.', 'hot');
     });
     this.hud.bind('[data-a="b"]', () => { this.audio.click(); back(); });
+  }
+
+  /** Copy the live pot aside before the viewer dresses it in an old one. */
+  _stashPot() {
+    const u = this.mat.userData.u;
+    const rig = this.eng.rig;
+    return {
+      field: this.field.data.slice(),
+      fired: u.uFired.value, wet: u.uWet.value,
+      bisque: u.uBisque.value, vitrified: u.uVitrified.value,
+      bodyCol: u.uBodyCol.value.clone(), bodyCol2: u.uBodyCol2.value.clone(),
+      visible: this.pot.visible, rotY: this.pot.rotation.y,
+      cam: { r: rig.goalRadius, phi: rig.goalPhi, theta: rig.goalTheta, target: rig.goalTarget.clone() },
+    };
+  }
+
+  /** And put it back, exactly as it was. */
+  _restorePot(st) {
+    if (!st) return;
+    this.field.data.set(st.field);
+    this.field._push?.();
+    if (this.clay) this.pb.build(this.clay);
+    const u = this.mat.userData.u;
+    u.uFired.value = st.fired; u.uWet.value = st.wet;
+    u.uBisque.value = st.bisque; u.uVitrified.value = st.vitrified;
+    u.uBodyCol.value.copy(st.bodyCol); u.uBodyCol2.value.copy(st.bodyCol2);
+    // the surface comes from the fire result the live state is holding,
+    // not from the one the shelf piece was dressed with
+    applyFireResult(this.mat, this.fireResult ?? null, this.slots ?? [null, null, null]);
+    this.pot.visible = st.visible;
+    this.pot.rotation.y = st.rotY;
+    this.eng.rig.frame(st.cam.target, st.cam.r, st.cam.phi, st.cam.theta);
   }
 
   /** Where the pot is on screen, so the card crops around it. */
