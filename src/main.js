@@ -217,6 +217,8 @@ async function main() {
     }
 
     try {
+      // the panels follow the screen for the same reason the canvas does
+      hud.syncViewport();
       eng.render(dt);
       blankWatch.tick();
       if (diag.open && (frames & 15) === 0) diag.render();

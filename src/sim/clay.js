@@ -1084,8 +1084,36 @@ export class Clay {
         this.ro[i] += Math.min(rate * 0.30 * w, 0.018);
         this.ri[i] -= Math.min(rate * 0.05 * w, 0.004);
         if (this.ri[i] < 0) this.ri[i] = 0;
-        this.ox[i] *= 1 + rate * 1.6;
-        this.oz[i] *= 1 + rate * 1.6;
+
+        /* The lean, on the same terms as the radii above.
+           These two lines used to read `this.ox[i] *= 1 + rate * 1.6`,
+           which is the exact runaway the paragraph above says was capped
+           out of the radii — left multiplicative, and with no ceiling at
+           all. Measured against the real numbers: at full over-stress
+           the rate is 0.0875, so the offset is multiplied by 1.14 EVERY
+           FRAME. Starting from the 0.01 cm every thrown pot carries, it
+           passes the pot's own radius in 48 frames — eight tenths of a
+           second — and reaches 67,388 cm after one second. Even a mild
+           1.5 over-stress gets to 10.9 cm, twice the radius.
+           A pot whose axis is outside its own wall, on a wheel doing 31
+           rad/s, does not look like a pot slumping. It looks like the
+           whole thing violently growing and shrinking, because what you
+           are watching is the silhouette of an off-centre body swinging
+           through the view once per revolution.
+           So: additive, capped per step exactly like ro and ri, and
+           saturating at a lean the piece cannot come back from. It still
+           goes off true under stress — it has to, that is the warning —
+           but it takes about twelve seconds instead of one, which is
+           long enough to do what the coach line tells you to do and slow
+           the wheel down. */
+        const off = Math.hypot(this.ox[i], this.oz[i]);
+        if (off > 1e-9) {
+          const leanMax = rc * 0.55;
+          const grown = Math.min(off + Math.min(rate * 0.9 * w, 0.004), leanMax);
+          const k = grown / off;
+          this.ox[i] *= k;
+          this.oz[i] *= k;
+        }
         this.scar[i] = clamp01(this.scar[i] + rate * 0.30);
         collapse += over * dt;
       }

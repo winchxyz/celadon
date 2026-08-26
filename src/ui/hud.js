@@ -93,6 +93,10 @@ export class HUD {
 
     this._measure();
     addEventListener('resize', () => this._measure());
+    if (typeof visualViewport !== 'undefined' && visualViewport) {
+      visualViewport.addEventListener('resize', () => this._measure());
+      visualViewport.addEventListener('scroll', () => this._measure());
+    }
 
     // The wheel gauge doubles as the pedal: scrolling is nice when it
     // works, but a bar you can grab is one nobody has to be told about.
@@ -162,6 +166,33 @@ export class HUD {
    * glaze panel ended up over the belt on an upright iPad, while a wide
    * desktop window showed nothing wrong at all.
    */
+  /**
+   * Notice the screen changing size without being told about it.
+   *
+   * Every panel in this HUD is sized against --vh, and --vh was only
+   * ever rewritten when a resize event arrived. iOS drops that event in
+   * exactly the situations that matter — switching between the mobile
+   * and desktop version of a site, rotating during a gesture, Safari's
+   * own pinch — and a --vh left over from the last size is not a subtle
+   * error: caught here at 720px while the window was 834, it made the
+   * results card 114px shorter than the screen it was on, which reads
+   * as a panel with its bottom cut off and a scrollbar that should
+   * never have been needed.
+   *
+   * The renderer already stopped trusting that event and asks the
+   * screen its size every frame instead. This is the same fix for the
+   * other half of the picture, and it costs a comparison unless
+   * something actually moved.
+   */
+  syncViewport() {
+    const vv = typeof visualViewport !== 'undefined' && visualViewport;
+    const w = Math.round(vv ? vv.width : window.innerWidth);
+    const h = Math.round(vv ? vv.height : window.innerHeight);
+    if (w === this._vpW && h === this._vpH) return;
+    this._vpW = w; this._vpH = h;
+    this._measure();
+  }
+
   _measure() {
     const s = document.documentElement.style;
     const shown = (e) => e && getComputedStyle(e).display !== 'none';
@@ -176,9 +207,14 @@ export class HUD {
        because iOS draws no scrollbar until you touch one, the result
        does not look like a panel that scrolls. It looks like a panel
        with its bottom cut off, which is exactly how it was reported.
-       innerHeight is the visible height. Everything that used to be
-       measured in vh is measured against this instead. */
-    s.setProperty('--vh', `${Math.round(window.innerHeight)}px`);
+       innerHeight is better than vh, and still not right: it is the
+       LAYOUT viewport, and an iPad showing the desktop version of a
+       site lays the page out at a nominal desktop size that has nothing
+       to do with the glass. visualViewport is what is actually on the
+       display, and it is the same number the canvas is now sized from,
+       so the panels and the picture agree by construction. */
+    const vv = typeof visualViewport !== 'undefined' && visualViewport;
+    s.setProperty('--vh', `${Math.round(vv ? vv.height : window.innerHeight)}px`);
 
     // Along the bottom: the hint bar, and the tool belt standing on it.
     s.setProperty('--bar-h', `${h(this.bottomBar)}px`);

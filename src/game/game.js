@@ -50,20 +50,41 @@ const BAND_NOTCH = Math.PI / 30;   // 6 degrees
 const GLAZE_TOOLS = {
   brush: { shape: 0, rad: 0.075 },
   wax:   { shape: 0, rad: 0.06 },
-  spray: { shape: 2, spread: 0.22 },
-  pour:  { shape: 3, widthFrac: 0.075 },
+  /* Measured on the real field rather than guessed at.
+     Spray was 0.22 turns of spread, and two seconds of holding put
+     glaze over 219 degrees of the pot — 61% of the whole circumference
+     from one press. That is not a spray, it is a fog, and it ends the
+     decision the moment you touch it. 0.075 reaches about 74 degrees,
+     which is a side, not a pot.
+     Pour was 0.075 and laid down 47 degrees, which is a brush stroke
+     (the brush does 54) — so it read as a stripe and nobody could tell
+     what it was for. A pour off a jug is a broad sheet; 0.17 makes it
+     about 103 degrees, wider than anything else on the belt. */
+  spray: { shape: 2, spread: 0.075 },
+  pour:  { shape: 3, widthFrac: 0.17 },
 };
 
-/** Where a gaussian has fallen to half — the distance the eye reads as
- *  the edge of the mark. k is the exponent's coefficient in the falloff. */
-const halfPower = (k) => Math.sqrt(Math.LN2 / k);
+/** How far the mark actually reaches.
+ *
+ *  This used to report the HALF-POWER width — where the gaussian has
+ *  fallen to 0.5 — which is a reasonable thing to draw and the wrong
+ *  thing to promise. Glaze keeps landing well past that point: the loops
+ *  in GlazeField carry on depositing until the weight drops under 0.02
+ *  (pour) or 0.015 (spray), and measured, pour marked 19 degrees and
+ *  covered 47. The ring said one thing and the pot did another, which is
+ *  the single most confusing thing a cursor can do.
+ *
+ *  So the mark is now drawn at the cutoff the deposit loops actually
+ *  use, and what you see is the edge of what you get.
+ */
+const reachFor = (k, cutoff) => Math.sqrt(Math.log(1 / cutoff) / k);
 
 /** The size to hand the shader: centimetres for a spot, turns of angle
  *  for the two shapes that are bounded round the pot rather than along it. */
 function cursorSize(t, arcLen) {
-  if (t.shape === 0) return t.rad * arcLen;                    // cm
-  if (t.shape === 2) return t.spread * halfPower(2.2);         // turns
-  return t.widthFrac * 0.5 * halfPower(1.4);                   // turns
+  if (t.shape === 0) return t.rad * arcLen;                     // cm
+  if (t.shape === 2) return t.spread * reachFor(2.2, 0.015);    // turns
+  return t.widthFrac * 0.5 * reachFor(1.4, 0.02);               // turns
 }
 
 export class Game {
@@ -1977,6 +1998,18 @@ export class Game {
     let cursorOn = 0;
 
     if (tool === 'dip') {
+      /* _dipFrac is the GLAZE LINE, as a fraction of the height, and it
+         is simply where the hand is. It used to be handed to dip() as a
+         depth, and dip() reads a depth as "how far up from the foot the
+         glaze reaches" — so the two ran in opposite directions and the
+         marker ended up at the mirror image of the line it claimed to
+         show. Measured on the real field: the marker at 0.20 of the
+         height put the glaze line at 0.801, at 0.50 it put it at 0.514,
+         and at 0.80 it put it at 0.206. Marker plus line came to 1.0
+         every time, which is a sign error, not a matter of taste.
+         Now the marker sits ON the line, and pushing the pot further
+         down into the bucket covers more of it — which is what a hand
+         and a bucket do. */
       const frac = clamp01(this.tool.y / Math.max(1, c.height));
       this._dipFrac = frac;
       u.uCursor.value.set(0.5, 0, 0, 0);
@@ -2061,7 +2094,9 @@ export class Game {
       if (down) { this._dipHeld = true; return; }
       if (!this._dipHeld) return;
       this._dipHeld = false;
-      this.field.dip(clamp01(this._dipFrac ?? 0.8), this.slotIndex, this.glazeThickness);
+      // dip() takes a depth measured up from the foot; _dipFrac is the
+      // line measured down from the rim. They are complements.
+      this.field.dip(1 - clamp01(this._dipFrac ?? 0.2), this.slotIndex, this.glazeThickness);
       this.field.upload();
       this.audio.splash(0.34);
       this.hud.toast(`Dipped to ${Math.round(100 * clamp01(this._dipFrac ?? 0.8))}%.`, '', 1500);
@@ -2514,6 +2549,7 @@ export class Game {
             <span class="k">WALL</span> ${fmt(r.metrics.meanWall, 2)} cm
           </div>
         </div>
+        </div>
         <div>
           <div class="grade">${gr.g}<small>${gr.name}</small></div>
           <ul class="notes">
@@ -2521,8 +2557,10 @@ export class Game {
           </ul>
         </div>
       </div>
-      ${unl.length ? `<div class="lore-card"><div class="lc-h">New in the shed</div><p>${unl.join(' · ')}</p></div>` : ''}
-      ${(r.accepted && lore) ? `<div class="lore-card"><div class="lc-h">${lore.h}</div><p>${lore.p}</p></div>` : ''}
+      ${(unl.length || (r.accepted && lore)) ? `<div class="lore-row">
+        ${unl.length ? `<div class="lore-card"><div class="lc-h">New in the shed</div><p>${unl.join(' · ')}</p></div>` : ''}
+        ${(r.accepted && lore) ? `<div class="lore-card"><div class="lc-h">${lore.h}</div><p>${lore.p}</p></div>` : ''}
+      </div>` : ''}
       <div class="ov-actions">
         <button class="btn primary" data-a="next">${this.free ? 'Throw another' : 'Next commission'}</button>
         <button class="btn" data-a="shelf">Put it on the shelf</button>

@@ -224,18 +224,32 @@ html,body{
 #commission{
   left:calc(var(--pad)*1.4);
   top:calc(var(--top-h) + var(--pad)*0.6);
-  width:min(300px,26vw);
+  width:min(340px,30vw);
   max-height:calc(var(--vh) - var(--top-h) - var(--bar-h) - var(--belt-h) - var(--pad)*3);
-  overflow:auto;
+  /* A column that gives way in a chosen order, instead of a scrollbar.
+     What the brief IS — the title, the shape it wants and the list of
+     numbers it will be judged against — is the part you have to be able
+     to read at a glance while your hands are on the clay. The client's
+     little speech is flavour. So everything load-bearing holds its size
+     and the quote is the only thing allowed to shrink, which means a
+     short window loses a line of prose rather than hiding the
+     requirements behind a scroll nobody notices on a tablet. */
+  display:flex;flex-direction:column;
+  overflow:hidden;
 }
-#commission::-webkit-scrollbar{width:4px}
-#commission::-webkit-scrollbar-thumb{background:#4A352424;border-radius:3px}
 #com-title{font:400 18px/1.25 var(--serif);letter-spacing:.03em;margin-bottom:.15em}
 #com-from{font:400 11px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--celadon-deep);margin-bottom:.9em}
 #com-text{
   font:400 12px/1.6 var(--serif);color:var(--ink-dim);font-style:italic;
   margin:1em 0 0;padding-top:.9em;border-top:1px solid var(--line);
   display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;
+  /* the one element that yields when the window is short */
+  flex:0 1 auto;min-height:0;
+  /* and when it is clipped it fades out instead of guillotining a word
+     halfway through, which is what made it look broken rather than
+     abridged */
+  mask-image:linear-gradient(to bottom,#000 62%,transparent 100%);
+  -webkit-mask-image:linear-gradient(to bottom,#000 62%,transparent 100%);
 }
 #com-reqs{list-style:none;display:flex;flex-direction:column;gap:.5em}
 #com-reqs li{
@@ -537,7 +551,9 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radiu
   padding:.75em 1.5em;border-radius:16px;
   background:var(--ash-1);border:2px solid var(--ash-4);
   color:var(--ink);
-  animation:toastin .45s cubic-bezier(.2,.9,.3,1) both;
+  /* forwards, for the same reason as the overlay: a toast that never
+     animates should be a toast, not an invisible one. */
+  animation:toastin .45s cubic-bezier(.2,.9,.3,1) forwards;
   /* One shadow. This was declared twice and the second won, so the
      slab lost the offset underside every other plate has. */
   box-shadow:0 6px 0 -1px var(--ash-4), 0 18px 34px -20px rgba(46,33,24,.5);
@@ -552,7 +568,13 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radiu
 
 /* ---------------- overlay ---------------- */
 #overlay{
-  position:absolute;inset:0;display:none;place-items:center;
+  /* fixed, not absolute. It lives inside #hud, which is a relative box
+     in normal flow, so inset:0 was resolving against whatever height
+     #hud happened to have rather than against the screen — and the card
+     centred inside it sat 22px low, which put its bottom edge, and the
+     buttons on it, past the bottom of a short display. A modal scrim
+     belongs to the viewport. */
+  position:fixed;inset:0;display:none;place-items:center;
   /* Warm, and only just dark enough to sit the card off the room. This
      was a near-black radial gradient — the last of the old cockpit —
      and every word on top of it is cocoa ink, so the whole menu was
@@ -560,7 +582,22 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radiu
   background:rgba(46,33,24,.44);
   backdrop-filter:blur(7px);z-index:20;
 }
-#overlay.on{display:grid;animation:fadein .55s cubic-bezier(.2,.9,.3,1) both}
+/* `forwards`, never `both`.
+   `both` fills BACKWARDS as well, which pins the element at the `from`
+   keyframe — opacity 0 — from the moment it is displayed until the
+   animation actually starts running. That is fine while the browser is
+   animating and catastrophic when it is not: iOS stops advancing
+   animations in a tab it is not rendering, and caught here in a
+   non-compositing pane the results card sat at opacity 0 with its
+   animation reading playState "running", currentTime 0, indefinitely.
+   The player finishes a firing and the screen never arrives.
+   This is the same fault as the loading plate that would not go away,
+   with the sign reversed, and it has the same rule behind it: a CSS
+   animation must never be the only thing standing between the player
+   and the content. Without a backwards fill the element simply rests
+   in its own visible state, and the entrance is decoration that either
+   plays or does not. */
+#overlay.on{display:grid;animation:fadein .55s cubic-bezier(.2,.9,.3,1) forwards}
 #overlay.soft{
   /* The title keeps the piece on the wheel in shot, so the scrim is
      weighted to the left where the words are and clears away to
@@ -570,8 +607,23 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radiu
   backdrop-filter:blur(1.5px);
 }
 #ov-inner{
-  width:min(880px,90vw);max-height:calc(var(--vh) * 0.88);overflow:auto;
-  padding:clamp(26px,3.4vw,52px);
+  /* 880px inside a 1333px window is 66% of the width, and the result of
+     leaving that third empty was not a roomier card — it was a NARROWER
+     notes column, so seven notes wrapped onto two lines each, the card
+     grew past the viewport, and the answer given to that was a
+     scrollbar with the buttons pushed off the bottom edge. The content
+     did not need less room, it needed the room that was already there.
+     Wider card, shorter card. */
+  width:min(1180px,94vw);max-height:calc(var(--vh) * 0.88);
+  display:flex;flex-direction:column;
+  overflow:auto;
+  /* One number, used by the padding AND by the sticky footer that has
+     to cancel it. They were written out separately and the short-window
+     rules changed only one of them, so the buttons unstuck themselves
+     and slid off the bottom on exactly the screens that needed them
+     pinned most. */
+  --card-pad:clamp(26px,3.4vw,52px);
+  padding:var(--card-pad);
   /* A slab of the same cream the panels are made of. The WebGL clay
      layer sits below the overlay in the stack, so a plate drawn there
      would be dimmed by this scrim; this is the same material painted
@@ -580,7 +632,7 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radiu
   color:var(--ink);
   border-radius:28px;
   box-shadow:0 22px 52px rgba(46,33,24,.34), inset 0 2px 0 #fff9;
-  animation:rise .55s cubic-bezier(.2,.9,.3,1) both;
+  animation:rise .55s cubic-bezier(.2,.9,.3,1) forwards;
 }
 /* The title keeps the piece on the wheel in the picture, so its card is
    narrower and sits over to the left, leaving the pot somewhere to be. */
@@ -602,7 +654,18 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radiu
 .ov-body{font:400 14px/1.85 var(--serif);color:var(--ink-dim);max-width:64ch}
 .ov-body p{margin-bottom:1.1em}
 .ov-body em{color:var(--celadon-deep);font-style:italic}
-.ov-actions{display:flex;gap:12px;margin-top:2.2em;flex-wrap:wrap}
+/* Pinned. If a card ever does overflow — a long enough list of notes on
+   a short enough window will always be able to — the thing that goes off
+   the bottom edge must not be the only way out of the screen. Sticky
+   keeps them on the glass with the card's own material behind them, so
+   they are reachable at any height without a scroll to find them. */
+.ov-actions{
+  display:flex;gap:12px;margin-top:2.2em;flex-wrap:wrap;
+  position:sticky;bottom:calc(var(--card-pad) * -1);
+  padding:1.1em 0 calc(var(--card-pad) * 0.5);
+  background:linear-gradient(to bottom,transparent,var(--ash-1) 22%);
+  margin-bottom:calc(var(--card-pad) * -0.5);
+}
 
 /* score sheet */
 .score-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,2.6vw,42px);align-items:start}
@@ -962,4 +1025,62 @@ body.grabbing canvas#gl{cursor:none}
   #formview canvas{ max-height:120px; }
   #com-text{ font-size:11.5px; line-height:1.55; }
   #com-reqs{ gap:.35em; }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Short windows                                                      */
+/*                                                                     */
+/*  A short window is short because of the window, not because of the  */
+/*  content, and the answer to it is to spend less of it on            */
+/*  decoration. The display face, the row padding and the card's own   */
+/*  margins are the largest things on the card that carry no           */
+/*  information, so they are what gives way. 720px tall is a laptop    */
+/*  and half the tablets in the world; it is not a rare case to be     */
+/*  handled with a scrollbar.                                          */
+/*                                                                     */
+/*  THIS BLOCK MUST STAY AT THE END OF THE FILE. It was written        */
+/*  further up first, and every rule in it lost to the base rule of    */
+/*  the same specificity that came later — the title measured 58px     */
+/*  when the override asked for 42. That is the second time a block    */
+/*  in this stylesheet has been silently dead for exactly that         */
+/*  reason.                                                            */
+/* ------------------------------------------------------------------ */
+/* Two cards, one row.
+   Stacked, the unlock note and the charter quote added their full
+   heights to a card that was already the tallest thing on the screen —
+   and there is a whole column of width sitting next to each of them
+   doing nothing. Side by side they cost one card's height instead of
+   two. A single card simply fills the row. */
+.lore-row{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:clamp(12px,1.4vw,20px);
+  align-items:start;
+}
+.lore-row .lore-card{margin-top:0}
+
+/* Narrow means ONE column, and that makes the card SHORTER, not taller.
+   It is the wrong way round until you look at what actually costs the
+   height: at 768px wide the two columns are about 330px each, every one
+   of the seven notes wraps onto two or three lines, and the card runs
+   to 988px. Given the full width the same notes take one line each and
+   the whole thing comes in shorter than the two-column version. The
+   column count is not the point — the wrapping is. */
+@media (max-width: 900px){
+  .score-grid{grid-template-columns:1fr;gap:clamp(14px,2vw,22px)}
+}
+
+@media (max-height: 820px){
+  /* Room is the scarce thing here, so take a little more of it. */
+  #ov-inner{max-height:calc(var(--vh) * 0.94);--card-pad:clamp(16px,2vw,26px)}
+  .ov-title{font-size:clamp(26px,3.2vw,40px);margin-bottom:.3em}
+  .ov-kicker{margin-bottom:.7em}
+  .score-grid{gap:clamp(16px,2vw,28px)}
+  .srow{padding:.55em 0}
+  .srow.total{margin-top:.3em;padding-top:.8em}
+  .notes{margin-top:1.1em;gap:.45em}
+  .grade{font-size:clamp(44px,5vw,64px)}
+  .grade small{margin-top:.7em}
+  .lore-card{padding:.9em 1.1em;margin-top:1.1em}
+  .ov-actions{margin-top:1.4em}
 }
