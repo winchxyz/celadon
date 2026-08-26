@@ -19,6 +19,7 @@ import * as SaveIO from './save.js';
 import { KILN_POS } from '../render/studio.js';
 import { EXPOSURE0, CAMERA } from '../core/engine.js';
 import { describeRequirements } from '../ui/hud.js';
+import { dressPot, drawCard, cropPot, handOver } from './piece.js';
 
 const ST = {
   TITLE: 'title', BRIEF: 'brief', THROW: 'throw', TRIM: 'trim',
@@ -1246,15 +1247,28 @@ export class Game {
       this.pot.rotation.y = this.wheelAngle;
     }
 
-    switch (this.state) {
-      case ST.TITLE: this._updateTitle(dt); break;
-      case ST.THROW: this._updateThrow(dt); break;
-      case ST.TRIM: this._updateThrow(dt, true); break;
-      case ST.GLAZE: this._updateGlaze(dt); break;
-      case ST.KILN: this._updateKilnSetup(dt); break;
-      case ST.FIRING: this._updateFiring(dt); break;
-      case ST.REVEAL: this._updateReveal(dt); break;
-      default: break;
+    /* Looking at a finished piece is not a phase of the game, it is a
+       pause in one, so the phase it paused does not get to keep running
+       underneath. It was still running: the glaze room re-enables the
+       dip marker every frame from the selected tool, so a bright green
+       ball hung in the air beside a finished pot on the card you were
+       about to send somebody. Everything the working state wants to
+       draw or move is skipped; the camera and the room keep going,
+       which is what lets you turn the piece and look at it. */
+    if (this._viewing) {
+      this.marker.visible = false;
+      this.ghost.visible = false;
+    } else {
+      switch (this.state) {
+        case ST.TITLE: this._updateTitle(dt); break;
+        case ST.THROW: this._updateThrow(dt); break;
+        case ST.TRIM: this._updateThrow(dt, true); break;
+        case ST.GLAZE: this._updateGlaze(dt); break;
+        case ST.KILN: this._updateKilnSetup(dt); break;
+        case ST.FIRING: this._updateFiring(dt); break;
+        case ST.REVEAL: this._updateReveal(dt); break;
+        default: break;
+      }
     }
 
     this.studio.update(dt, {
@@ -2593,11 +2607,11 @@ export class Game {
       <div class="ov-sub">Everything that came out of the kiln in one piece.</div>
       <div class="shelf">
         ${items.map((p, i) => `
-          <div class="piece">
+          <button class="piece" data-p="${i}" title="Look at this one">
             <canvas data-i="${i}" width="150" height="112"></canvas>
             <div class="pn">${p.title || p.gradeName}</div>
             <div class="pg">${p.grade} · ${p.total} · DAY ${p.day}</div>
-          </div>`).join('')}
+          </button>`).join('')}
       </div>
       <div class="ov-actions"><button class="btn primary" data-a="b">Back</button></div>`);
     // draw silhouettes
@@ -2605,6 +2619,133 @@ export class Game {
       drawPieceThumb(cv, items[parseInt(cv.dataset.i, 10)]);
     }
     this.hud.bind('[data-a="b"]', () => { this.audio.click(); back(); });
+    for (const el of this.hud.ovInner.querySelectorAll('.piece[data-p]')) {
+      el.addEventListener('click', () => {
+        this.audio.click();
+        this.showPiece(items[parseInt(el.dataset.p, 10)], () => this.showGallery(back));
+      });
+    }
+  }
+
+  /**
+   * One piece, on the wheel, turnable.
+   *
+   * The overlay is the soft one — the scrim clears away across the
+   * middle — because the whole point is to look at the pot, not at a
+   * card with a picture of it. The pot on the wheel IS the picture, and
+   * the same drag that turns it while you are glazing turns it here.
+   */
+  showPiece(p, back) {
+    if (!p || !p.clay) { back(); return; }
+    this._viewing = p;
+    /* The soft overlay deliberately leaves the room visible, which is
+       the point — but it leaves the working panels visible too, and a
+       shelf of glaze buckets alongside a finished pot is somebody
+       else's screen. Hidden by a class rather than by touching the
+       panels themselves, so nothing has to be rebuilt to bring them
+       back. */
+    document.getElementById('hud')?.classList.add('viewing');
+    dressPot(this, p);
+    this.pot.visible = true;
+    this.pot.position.set(0, 0, 0);
+    this.pot.rotation.y = 0;
+    this.ghost.visible = false;
+    this.marker.visible = false;
+    this.omegaTarget = 0;
+    this._band = 0;
+
+    const h = this.pb.top || 12;
+    this.eng.rig.frame(new THREE.Vector3(0, h * 0.5, 0), Math.max(26, h * 3.4), 1.12, 0.9);
+
+    const names = (p.glazes ?? []).map((id) => GLAZE_BY_ID[id]?.name).filter(Boolean);
+    const bodyName = BODIES.find((b) => b.id === p.body)?.name ?? '';
+    this.hud.openOverlay(`
+      <div class="ov-kicker">Day ${p.day} · ${p.grade} · ${p.total}</div>
+      <div class="ov-title">${p.title || p.gradeName || 'A pot'}</div>
+      <div class="ov-sub">${p.name ?? ''}</div>
+      <div class="readout" style="margin:1.2em 0 0">
+        <span class="k">BODY</span> ${bodyName}<br>
+        ${names.length ? `<span class="k">GLAZE</span> ${names.join(' · ')}<br>` : ''}
+        ${p.fire?.peak ? `<span class="k">PEAK</span> ${Math.round(p.fire.peak)}°C` : ''}
+      </div>
+      <div class="ov-hint">Drag to turn it.</div>
+      <div class="ov-actions">
+        <button class="btn primary" data-a="card">Make a card</button>
+        <button class="btn" data-a="b">Back to the shelf</button>
+      </div>`, true);
+
+    this.hud.bind('[data-a="b"]', () => {
+      this.audio.click();
+      this._viewing = null;
+      document.getElementById('hud')?.classList.remove('viewing');
+      back();
+    });
+    this.hud.bind('[data-a="card"]', () => { this.audio.click(); this.showCard(p, () => this.showPiece(p, back)); });
+  }
+
+  /**
+   * The card, and a line of your own on it.
+   *
+   * The picture is taken from the live canvas rather than re-rendered
+   * somewhere else, so what gets shared is the view the player framed —
+   * if they turned the pot to its good side, that is the side on the
+   * card. toDataURL only sees the drawing buffer while it still holds
+   * the frame, so the render and the grab happen in the same task.
+   */
+  showCard(p, back) {
+    const build = () => {
+      const cap = document.getElementById('card-caption')?.value ?? '';
+      const sig = document.getElementById('card-sign')?.value ?? '';
+      this.eng.render(0.016);
+      const shot = cropPot(this.eng.renderer.domElement, this._potScreenX());
+      return drawCard(shot, p, cap, sig);
+    };
+
+    this.hud.openOverlay(`
+      <div class="ov-kicker">Sign it</div>
+      <div class="ov-title">A card for it</div>
+      <div class="card-wrap">
+        <div class="card-preview"><img id="card-img" alt="the card"></div>
+        <div class="card-fields">
+          <label class="fl">Say something about it
+            <textarea id="card-caption" rows="3" maxlength="140"
+              placeholder="Third one this week. The first two are in the bin."></textarea></label>
+          <label class="fl">Signed
+            <input id="card-sign" maxlength="28" placeholder="your name" value="${(this.save.potter ?? '').replace(/"/g, '&quot;')}"></label>
+          <div class="ov-actions" style="margin-top:1.4em">
+            <button class="btn primary" data-a="send">Save or share</button>
+            <button class="btn" data-a="b">Back</button>
+          </div>
+        </div>
+      </div>`, true);
+
+    const img = document.getElementById('card-img');
+    const refresh = () => { img.src = build().toDataURL('image/png'); };
+    refresh();
+    for (const id of ['card-caption', 'card-sign']) {
+      document.getElementById(id)?.addEventListener('input', () => {
+        clearTimeout(this._cardT);
+        this._cardT = setTimeout(refresh, 220);
+      });
+    }
+
+    this.hud.bind('[data-a="send"]', async () => {
+      this.audio.click();
+      const sig = document.getElementById('card-sign')?.value ?? '';
+      if (sig.trim()) { this.save.potter = sig.trim(); SaveIO.save(this.save); }
+      const name = (p.title || 'celadon').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const how = await handOver(build(), name || 'celadon', `${p.title || 'A pot'} — made in CELADON`);
+      if (how === 'downloaded') this.hud.toast('Saved to your downloads.', 'good');
+      else if (how === 'shared') this.hud.toast('Sent.', 'good');
+      else if (how === 'failed') this.hud.toast('Could not make the picture.', 'hot');
+    });
+    this.hud.bind('[data-a="b"]', () => { this.audio.click(); back(); });
+  }
+
+  /** Where the pot is on screen, so the card crops around it. */
+  _potScreenX() {
+    const v = new THREE.Vector3(0, (this.pb.top || 12) * 0.5, 0).project(this.eng.camera);
+    return (v.x * 0.5 + 0.5) * this.eng.renderer.domElement.width;
   }
 
   showCodex(back) {

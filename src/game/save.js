@@ -48,6 +48,10 @@ export function blankSave() {
     titles: [],
     codex: [],
     gallery: [],
+    // What the potter signs a card with. Empty until they type one, and
+    // read with a fallback everywhere, so a save written before this
+    // existed loads without a migration.
+    potter: '',
     best: 0,
     firings: 0,
     crazed: 0,

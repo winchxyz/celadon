@@ -1097,6 +1097,56 @@ body.grabbing canvas#gl{cursor:none}
      the names still full width and still readable. */
 }
 
+/* Looking at a finished piece: the room stays, the workbench does not. */
+#hud.viewing #context,
+#hud.viewing #commission,
+#hud.viewing #toolbar,
+#hud.viewing #bottom-bar{display:none !important}
+
+/* ---------------- a piece, and its card ---------------- */
+/* The shelf items became buttons so they can be tapped and reached by a
+   keyboard; they were divs with a hover transform and no handler, which
+   is a control that looks live and is not. */
+.piece{
+  appearance:none;font:inherit;color:inherit;text-align:left;width:100%;
+}
+.ov-hint{
+  font:400 12px/1.5 var(--serif);color:var(--ink-dim);
+  margin-top:1.4em;font-style:italic;
+}
+.card-wrap{
+  display:grid;grid-template-columns:minmax(220px,320px) 1fr;
+  gap:clamp(18px,2.4vw,34px);align-items:start;margin-top:1.4em;
+}
+.card-preview{
+  background:#4A352412;border-radius:16px;padding:10px;
+}
+.card-preview img{
+  display:block;width:100%;height:auto;border-radius:10px;
+  box-shadow:0 8px 22px rgba(46,33,24,.22);
+}
+.card-fields{display:flex;flex-direction:column;min-width:0}
+.fl{
+  display:block;font:600 10px/1 var(--sans);letter-spacing:.16em;
+  color:var(--ink-dim);text-transform:uppercase;margin-bottom:1.1em;
+}
+.fl textarea,.fl input{
+  display:block;width:100%;margin-top:.7em;
+  font:400 14px/1.5 var(--serif);color:var(--ink);
+  background:#FFFFFF7a;border:1px solid var(--line);border-radius:12px;
+  padding:.7em .85em;resize:none;
+  /* 16px or iOS zooms the whole page in when the field is focused, and
+     the layout the player was looking at is gone. */
+  font-size:16px;
+}
+.fl textarea:focus,.fl input:focus{outline:2px solid var(--celadon);outline-offset:1px}
+/* One column when there is not room for two, so the preview stays big
+   enough to actually judge the card by. */
+@media (max-width: 760px){
+  .card-wrap{grid-template-columns:1fr}
+  .card-preview{max-width:320px;margin:0 auto}
+}
+
 /* The bucket shelf gets its own threshold, and a taller one.
    At 1194x834 — an iPad in landscape, the single most likely screen
    this game is played on — the shelf needed 350px and the panel could
