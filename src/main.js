@@ -229,7 +229,27 @@ function pickQuality() {
      laptop in the world. */
   const touchOnly = matchMedia('(pointer:coarse)').matches
     && !matchMedia('(any-pointer:fine)').matches;
-  if (touchOnly) return 'medium';
+
+  /* ...and an iPad asked to show the desktop version of a site says it
+     is a Mac. It reports a fine pointer, a desktop-width layout and a
+     Mac platform, so every test above is answered the way a laptop
+     would answer it and the tablet quietly took the heavy chain — full
+     device pixel ratio, more post passes — on a GPU chosen for battery
+     life. Same hardware, twice the load, purely because of a menu
+     setting the player flipped for unrelated reasons.
+
+     That is not what made the flash white in one mode and black in the
+     other; the page background was. It is its own fault, found while
+     chasing that one, and worth closing on its own terms.
+
+     A Mac has no touchscreen. maxTouchPoints is 0 on every real one and
+     5 on an iPad, and it keeps saying 5 in desktop mode — the one part
+     of the disguise the platform string cannot cover. */
+  const nav = navigator;
+  const pretendingToBeAMac = (nav.maxTouchPoints ?? 0) > 1
+    && /Mac/.test(nav.platform || '');
+
+  if (touchOnly || pretendingToBeAMac) return 'medium';
 
   if (mem <= 4 || cores <= 4 || small) return 'medium';
   return 'high';

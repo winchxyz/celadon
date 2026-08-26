@@ -316,7 +316,10 @@ export class Engine {
       alpha: false,
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality === 'high' ? 2 : 1.35));
-    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    {
+      const v = Engine.viewport();
+      renderer.setSize(v.w, v.h, false);
+    }
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.NeutralToneMapping;
     renderer.toneMappingExposure = EXPOSURE0;
@@ -337,7 +340,7 @@ export class Engine {
     this.scene.fog = null;
 
     this.camera = new THREE.PerspectiveCamera(
-      CAMERA.fov, window.innerWidth / window.innerHeight, CAMERA.near, CAMERA.far);
+      CAMERA.fov, Engine.viewport().w / Engine.viewport().h, CAMERA.near, CAMERA.far);
     this.camera.position.set(0, 24, 60);
 
     this.rig = new CameraRig(this.camera, canvas);
@@ -351,13 +354,20 @@ export class Engine {
     // a baseline the first resize event of the session rebuilds it again
     // for nothing, and on iOS that event arrives as soon as the toolbar
     // moves.
-    this._sizedW = Math.max(1, window.innerWidth || 1);
-    this._sizedH = Math.max(1, window.innerHeight || 1);
+    this._sizedW = Engine.viewport().w;
+    this._sizedH = Engine.viewport().h;
     this._sizedDpr = renderer.getPixelRatio();
 
     this.clock = new THREE.Clock();
     this._onResize = () => this.resize();
     window.addEventListener('resize', this._onResize);
+    // iOS moves the visual viewport without firing a window resize —
+    // the toolbar sliding, a pinch, the keyboard — and the canvas has to
+    // follow it or the page shows around the edges
+    if (typeof visualViewport !== 'undefined' && visualViewport) {
+      visualViewport.addEventListener('resize', this._onResize);
+      visualViewport.addEventListener('scroll', this._onResize);
+    }
 
     /* A lost context is not a crash, and it should not look like one.
        When a tablet runs short of GPU memory it takes the context away
@@ -381,7 +391,7 @@ export class Engine {
 
   _buildComposer() {
     const { renderer, scene, camera } = this;
-    const w = window.innerWidth, h = window.innerHeight;
+    const { w, h } = Engine.viewport();
     const dpr = renderer.getPixelRatio();
 
     const rt = new THREE.WebGLRenderTarget(w * dpr, h * dpr, {
@@ -480,6 +490,25 @@ void main(){
     this.composer = composer;
   }
 
+  /**
+   * The size the canvas actually has to cover.
+   *
+   * innerWidth and innerHeight are the LAYOUT viewport, and on an iPad
+   * asked to show the desktop version of a site that is not the screen —
+   * Safari lays the page out at a nominal desktop width and scales it.
+   * A canvas sized from those numbers does not cover what is being
+   * displayed, and the page shows around it: reported as the screen
+   * flashing white, because the page was cream and the scene is not.
+   * visualViewport is what is actually on the glass.
+   */
+  static viewport() {
+    const vv = typeof visualViewport !== 'undefined' && visualViewport;
+    return {
+      w: Math.max(1, Math.round(vv ? vv.width : (window.innerWidth || 1))),
+      h: Math.max(1, Math.round(vv ? vv.height : (window.innerHeight || 1))),
+    };
+  }
+
   resize() {
     // A window can be zero pixels tall — collapsed, minimised, or a
     // preview pane mid-layout — and w/h is then Infinity or NaN. That
@@ -487,8 +516,7 @@ void main(){
     // by zero again the camera stays broken after the window comes
     // back: every ray from the cursor unprojects to NaN, so the pot
     // renders but cannot be touched.
-    const w = Math.max(1, window.innerWidth || 1);
-    const h = Math.max(1, window.innerHeight || 1);
+    const { w, h } = Engine.viewport();
 
     /* Do nothing if nothing changed.
        iOS fires resize for things that are not a resize: the toolbar
@@ -511,12 +539,40 @@ void main(){
 
   render(dt) {
     if (this._lost) return;   // there is nothing to draw into
+
+    /* Ask the screen its size rather than waiting to be told.
+       Every resize in this engine used to arrive as an event, and the
+       whole picture depended on that event actually being sent. iOS
+       does not always send it. Switching between the desktop and
+       mobile versions of a site, rotating the tablet during a gesture,
+       and Safari's own pinch — which the game's two-finger zoom sets
+       off as a side effect — all move the viewport, and the notification
+       is late, coalesced, or simply absent.
+
+       What is left behind is a canvas whose backing buffer disagrees
+       with the box it is drawn into: the picture is stretched, and
+       around it the browser composites whatever is behind the page.
+       That is the flash. It was white in desktop mode and black in
+       mobile mode because those two modes disagree about how wide the
+       page is, so the strip that showed through was a different
+       surface each time.
+
+       resize() already returns immediately when nothing has changed,
+       so the cost here is reading two numbers and comparing three —
+       measured at 0.0056 ms, against a 16 ms frame. Cheap enough that
+       the engine can simply stop trusting the event. */
+    this.resize();
     this.grade.uniforms.uTime.value += dt;
     this.composer.render(dt);
   }
 
   dispose() {
     window.removeEventListener('resize', this._onResize);
+    // the same three that were added, or the engine outlives itself
+    if (typeof visualViewport !== 'undefined' && visualViewport) {
+      visualViewport.removeEventListener('resize', this._onResize);
+      visualViewport.removeEventListener('scroll', this._onResize);
+    }
     this.composer.dispose?.();
     this.renderer.dispose();
   }

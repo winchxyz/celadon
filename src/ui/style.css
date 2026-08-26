@@ -92,7 +92,20 @@
 
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{
-  height:100%;overflow:hidden;background:#F4E7D2;
+  height:100%;overflow:hidden;
+  /* The colour BEHIND the canvas, and it has to be the colour of the
+     room — not the cream of a paper interface.
+     Reported from an iPad: the screen flashes white in desktop mode and
+     black in mobile mode. Two colours, one fault, and the difference is
+     simply what you are looking at when a frame does not arrive. A frame
+     that never reached the canvas shows the PAGE, which was #F4E7D2,
+     near-white. A frame that reached it empty shows the SCENE clear
+     colour, which is 0x2b3a3a, near-black. Desktop mode lays the page
+     out at a width the canvas does not cover, so the page wins there;
+     mobile mode the canvas covers it, so the scene wins.
+     Matching them means a missed frame is at worst a dark frame the
+     colour of the shed, instead of a white one. */
+  background:#2b3a3a;
   /* On a tablet every one of these is the browser taking a gesture the
      game needs. Without touch-action a finger on the clay scrolls the
      page instead of pulling the wall; without the rest, a press-and-hold
@@ -107,7 +120,7 @@ html,body{
    the damage was quiet: the canvas fell into normal flow, which pushed
    #app to 804 px inside an 800 px window, so the page could scroll by
    four pixels and the stacking context the HUD sits in was gone. */
-#app{position:fixed;inset:0;overflow:hidden}
+#app{position:fixed;inset:0;overflow:hidden;background:#2b3a3a}
 #gl{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none}
 
 #hud{position:relative;z-index:2}
