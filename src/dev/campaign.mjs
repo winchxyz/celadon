@@ -16,8 +16,8 @@
 //
 //  Run:  node src/dev/campaign.mjs
 // ============================================================
-import { COMMISSIONS, FORMS, BODIES, RANKS } from '../game/lore.js';
-import { GLAZES, GLAZE_BY_ID, maturePoint, fuelCost, guildSchedule } from '../sim/glaze.js';
+import { COMMISSIONS, FORMS, BODIES, RANKS, proceduralCommission } from '../game/lore.js';
+import { GLAZES, GLAZE_BY_ID, maturePoint, fuelCost, guildSchedule, fire, EFFECTS_FOR } from '../sim/glaze.js';
 import { blankSave, unlock } from '../game/save.js';
 import { payMultiplier } from '../game/scoring.js';
 
@@ -105,19 +105,29 @@ ok(missing.temp.length === 0,
   console.log('');
   ok(sags.length === 0, `the fee never falls away sharply${sags.length ? ': ' + sags.join('; ') : ''}`);
 
-  // walk it again, paying and firing, at a middling standard of work
-  let coin = blankSave().coin, broke = null;
+  // walk it again, buying clay, paying for wood and firing, at a
+  // middling standard of work
+  let coin = blankSave().coin, broke = null, clayTotal = 0, woodTotal = 0;
   const MIDDLING = 72;
+  const BALL = 1500;   // an ordinary ball; clay is priced against it
   COMMISSIONS.forEach((c) => {
     const g = GLAZE_BY_ID[c.require?.glaze] ?? GLAZE_BY_ID.ash;
-    const cost = fuelCost(guildSchedule([g], { meanWall: 0.45 }, c.require));
-    if (cost > coin && !broke) broke = `${c.id}: ${cost} to fire, ${coin} in the purse`;
-    coin -= cost;
+    // the brief may name the clay; otherwise the cheapest will do
+    const b = BODIES.find((x) => x.id === c.require?.body) ?? BODIES[0];
+    const clay = Math.max(1, Math.round(b.price * BALL / 1500));
+    const wood = fuelCost(guildSchedule([g], { meanWall: 0.45 }, c.require));
+    clayTotal += clay; woodTotal += wood;
+    if (clay + wood > coin && !broke) {
+      broke = `${c.id}: ${clay} for clay and ${wood} for wood, ${coin} in the purse`;
+    }
+    coin -= clay + wood;
     coin += Math.round(c.pay * payMultiplier(MIDDLING, true));
   });
-  console.log(`         a middling potter finishes the campaign with ${coin} ash-marks`);
-  ok(!broke, `and is never unable to light the kiln${broke ? ' — ' + broke : ''}`);
+  console.log(`         a middling potter spends ${clayTotal} on clay and ${woodTotal} on wood, ` +
+              `and finishes with ${coin} ash-marks`);
+  ok(!broke, `and is never unable to buy the clay and light the kiln${broke ? ' — ' + broke : ''}`);
   ok(coin > 0, 'the campaign is not a slow bankruptcy');
+  ok(clayTotal > 0, `the clay is actually paid for (${clayTotal} marks across the campaign)`);
 }
 
 /* ---- the rank ladder is reachable -------------------------------- */
@@ -157,6 +167,74 @@ ok(missing.temp.length === 0,
   ok(perfect > n * 0.7,
      `the last rank is not handed out in the first two thirds of the campaign ` +
      `(commission ${perfect} of ${n})`);
+}
+
+/* ---- and the work that comes after it ----------------------------- */
+{
+  console.log('');
+  /* The endless mode used to open at ninety marks — a ninety per cent
+     cut the moment the campaign's nine-hundred-mark finale was behind
+     you — and it generated a form, a glaze, a height and a wall and
+     nothing else, so every job after the campaign was the same job.
+     Both are worth holding down, and so is the thing that makes a
+     generated brief dangerous: it is written by a dice roll, and a dice
+     roll can ask for an effect the named glaze has no way to produce. */
+  const rng = Object.assign(() => (rng._s = (rng._s * 16807) % 2147483647) / 2147483647, { _s: 12345 });
+  rng.pick = (a) => a[Math.floor(rng() * a.length) % a.length];
+
+  const allGlazes = GLAZES.map((g) => g.id);
+  const allBodies = BODIES.map((b) => b.id);
+  const made = [];
+  for (let n = 1; n <= 200; n++) made.push(proceduralCommission(rng, n, allGlazes, allBodies));
+
+  const impossible = made.filter((c) => {
+    const fx = c.require.effect;
+    if (!fx) return false;
+    return !(EFFECTS_FOR[c.require.glaze] ?? []).includes(fx);
+  });
+  ok(impossible.length === 0,
+     `no generated brief asks a glaze for an effect it cannot produce (200 drawn)` +
+     `${impossible.length ? ': ' + impossible.slice(0, 3).map((c) => `${c.require.glaze}+${c.require.effect}`).join(', ') : ''}`);
+
+  /* And the pairings the table promises are real. This is the guard on
+     EFFECTS_FOR itself: if the chemistry moves under it, a generated
+     brief starts asking for something the kiln stopped producing, and
+     nothing else in the game would ever say so. */
+  const GATE = { crystal: 0.4, oilspot: 0.3, hare: 0.4, carbon: 0.4, craze: 0.45, peel: 0.4, opal: 0.45, metal: 0.4 };
+  const body = { meanWall: 0.45, coe: 6.4 };
+  const broken = [];
+  for (const [gid, list] of Object.entries(EFFECTS_FOR)) {
+    for (const fx of list) {
+      if (fx === 'copperRed') continue;    // checked by its own commission
+      const g = GLAZE_BY_ID[gid];
+      let best = 0;
+      for (const t of [0.08, 0.11, 0.14, 0.18, 0.22]) {
+        const r = fire([{ glaze: g, coverage: 0.86, meanThick: t }], guildSchedule([g], body, { effect: fx }), body);
+        if (!r.destroyed) best = Math.max(best, r[fx] ?? 0);
+      }
+      if (best < GATE[fx]) broken.push(`${gid} cannot show ${fx} (${best.toFixed(2)} of ${GATE[fx]})`);
+    }
+  }
+  ok(broken.length === 0,
+     `every pairing the table promises comes out of the kiln` +
+     `${broken.length ? ':' + NL + '            ' + broken.join(NL + '            ') : ''}`);
+
+  const first = made[0], later = made[49];
+  const lastCampaign = COMMISSIONS[COMMISSIONS.length - 1];
+  console.log(`         the campaign ends at ${lastCampaign.pay} marks; the first standing order pays ` +
+              `${first.pay}, the fiftieth ${later.pay}`);
+  ok(first.pay > lastCampaign.pay * 0.4,
+     `finishing the campaign is not answered with a ninety per cent pay cut ` +
+     `(${first.pay} after ${lastCampaign.pay})`);
+  ok(later.pay > first.pay, 'and the standing orders climb rather than flatten');
+
+  const withEffect = made.filter((c) => c.require.effect).length;
+  const withAtmos = made.filter((c) => c.require.atmos).length;
+  const withBody = made.filter((c) => c.require.body).length;
+  console.log(`         of 200 drawn: ${withEffect} name an effect, ${withAtmos} an atmosphere, ${withBody} a clay`);
+  ok(withEffect + withAtmos + withBody > 60,
+     `the endless work asks for more than a shape and a colour ` +
+     `(${withEffect + withAtmos + withBody} of 200 carry something else)`);
 }
 
 console.log(bad ? NL + `  ${bad} FAILED` + NL

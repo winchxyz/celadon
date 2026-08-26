@@ -2,6 +2,10 @@
 //  CELADON — the Reach, its people, and what they want made
 // ============================================================
 
+// Which glaze can be asked to show which effect. A generated brief may
+// only ask for one the glaze it names can actually produce.
+import { EFFECTS_FOR } from '../sim/glaze.js';
+
 export const TITLE = 'CELADON';
 export const SUBTITLE = 'THE LONG ASH';
 
@@ -635,26 +639,59 @@ const ASKS = [
   'It has to hold four pints and not look like it does.',
 ];
 
-export function proceduralCommission(rng, n, unlockedGlazes) {
-  const formIds = Object.keys(FORMS);
-  const form = FORMS[rng.pick(formIds)];
+/**
+ * The work that comes after the campaign, for as long as you want it.
+ *
+ * Two things were wrong with it.
+ *
+ * The fee started at ninety marks. The commission immediately before it
+ * pays nine hundred, so finishing the whole campaign was rewarded with a
+ * ninety per cent pay cut and a return to the kind of job the game opens
+ * with — the endless mode read as a demotion. It is anchored to where
+ * the campaign actually leaves off now, and climbs from there.
+ *
+ * And a standing order asked for a form, a glaze, a height and a wall,
+ * and never for anything else: no atmosphere, no clay, no effect, so
+ * every job after the campaign was the same job with the nouns swapped.
+ * It can ask for the rest of what the game simulates now — but only for
+ * things that can actually happen. An effect is drawn from what the
+ * chosen glaze can genuinely produce (EFFECTS_FOR), never from the whole
+ * list, because a generated brief nobody can complete is worse than a
+ * dull one.
+ */
+export function proceduralCommission(rng, n, unlockedGlazes, unlockedBodies) {
+  const form = FORMS[rng.pick(Object.keys(FORMS))];
   const glaze = rng.pick(unlockedGlazes);
-  const scale = 1 + n * 0.04;
+  const last = COMMISSIONS[COMMISSIONS.length - 1];
+
   const minH = Math.round((form.ratio > 1 ? 18 : 9) * (0.9 + rng() * 0.4));
+  const require = {
+    form: form.id,
+    glaze,
+    minH,
+    maxWall: 0.95 - Math.min(0.3, n * 0.014),
+  };
+
+  // an effect, when the glaze in hand has one to give
+  const canShow = EFFECTS_FOR[glaze] ?? [];
+  if (canShow.length && rng() < 0.45) require.effect = rng.pick(canShow);
+
+  // an atmosphere, sometimes, and never one that fights the effect
+  if (!require.effect && rng() < 0.3) require.atmos = rng() < 0.5 ? 'reduction' : 'oxidation';
+
+  // and occasionally a clay, out of the ones actually in the shed
+  const bodies = (unlockedBodies ?? []).filter((b) => BODIES.some((x) => x.id === b));
+  if (bodies.length > 1 && rng() < 0.25) require.body = rng.pick(bodies);
+
   return {
     id: `p${n}`,
     procedural: true,
-    title: `${form.name} — ${['Standing Order','Repeat','Commission','Private Order'][n % 4]} ${n}`,
+    title: `${form.name} — ${['Standing Order', 'Repeat', 'Commission', 'Private Order'][n % 4]} ${n}`,
     from: rng.pick(PATRONS),
-    pay: Math.round((90 + n * 26) * scale),
-    rep: Math.round((60 + n * 12) * scale),
+    pay: Math.round(last.pay * 0.52 + n * 24),
+    rep: Math.round(last.rep * 0.42 + n * 14),
     text: `"${rng.pick(ASKS)}"`,
-    require: {
-      form: form.id,
-      glaze,
-      minH,
-      maxWall: 0.95 - Math.min(0.3, n * 0.014),
-    },
+    require,
   };
 }
 

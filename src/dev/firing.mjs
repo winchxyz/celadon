@@ -20,6 +20,7 @@
 // ============================================================
 import { GLAZE_BY_ID, guildSchedule, defaultSchedule, fire, fuelCost, maturePoint, scheduleHours }
   from '../sim/glaze.js';
+import { COMMISSIONS } from '../game/lore.js';
 
 let bad = 0;
 const NL = String.fromCharCode(10);
@@ -114,6 +115,38 @@ ok(cracked.length === 0,
   const air = guildSchedule([GLAZE_BY_ID.oxblood], body(0.45), { atmos: 'oxidation' });
   ok(red.reduction > 0.5, `a brief asking for reduction gets it (${(red.reduction * 100).toFixed(0)}%)`);
   ok(air.reduction < 0.25, `and one asking for air gets that (${(air.reduction * 100).toFixed(0)}%)`);
+}
+
+/* ---- 6b. and it knows what it has been asked FOR --------------------
+   Pinning the peak to the maturing point is right for most briefs and
+   exactly wrong for the ones that want something a straight firing does
+   not give. Crystals have to be held on the way down, oil spots driven
+   past maturity and dropped, a raku lustre pulled hot and starved. Left
+   to the plain schedule, three commissions could not be completed at all
+   in the mode the game fires in by default: the crystal vase came out at
+   0.09 against a gate of 0.40. A brief that cannot be met is the one
+   thing the Guild must never hand you. */
+{
+  const GATE = { crystal: 0.4, oilspot: 0.3, hare: 0.4, carbon: 0.4, craze: 0.45, peel: 0.4, opal: 0.45, metal: 0.4 };
+  const asked = COMMISSIONS
+    .map((c) => ({ c, fx: c.require?.effect, g: GLAZE_BY_ID[c.require?.glaze] }))
+    .filter((x) => x.fx && x.fx !== 'copperRed' && x.g);
+
+  const short = [];
+  for (const { c, fx, g } of asked) {
+    const s = guildSchedule([g], body(0.45), c.require);
+    let best = 0;
+    for (const t of [0.08, 0.11, 0.14, 0.18, 0.22]) {
+      const r = fire([{ glaze: g, coverage: 0.86, meanThick: t }], s, body(0.45));
+      if (!r.destroyed) best = Math.max(best, r[fx] ?? 0);
+    }
+    console.log(`         ${c.id.padEnd(4)} wants ${fx.padEnd(8)} on ${g.name.padEnd(19)} ` +
+                `the Guild gets ${best.toFixed(2)} (needs ${GATE[fx]})`);
+    if (best < GATE[fx]) short.push(`${c.id} (${fx} on ${g.name}: ${best.toFixed(2)})`);
+  }
+  ok(short.length === 0,
+     `the Guild can fire for every effect the campaign asks for ` +
+     `(${asked.length} briefs)${short.length ? ' — cannot: ' + short.join(', ') : ''}`);
 }
 
 /* ---- 7. doing it by hand can still go wrong ------------------------- */

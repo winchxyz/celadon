@@ -244,8 +244,18 @@ and comes out in pieces.
 On the fired surface, colour comes from Beer–Lambert absorption through the
 glass layer, so a thick coat goes deep and a thin one stays pale, and the
 glaze breaks to a different colour over every ridge and rim. Crystals nucleate
-only where there is enough glass to grow in. Crazing comes from the expansion
-mismatch between glaze and body.
+only where there is enough glass to grow in.
+
+Crazing comes from the expansion mismatch between the glaze and **the clay
+underneath it** — which is the one property of a body a fired pot shows most
+plainly, and which the firing ignored for a long time in favour of a flat
+constant. Each body declares its own: Blackhill 6.0, Ashstone 6.4, Saltflat
+6.6, Reach Porcelain 6.9. A glaze that contracts more than its body ends up in
+tension and lets go in a net of cracks; one that contracts less is squeezed and
+holds. So Reach Porcelain puts a celadon into compression and it comes out of
+the kiln with no craze at all, which is exactly why those two have been fired
+together for a thousand years — and Blackhill crazes things Ashstone leaves
+alone.
 
 ### The kiln
 
@@ -264,12 +274,19 @@ Firing costs fuel, and fuel costs ash-marks, so every schedule is a bet.
 
 ## The rest of it
 
-**Twenty-four story commissions** with named patrons, then endless procedural
-ones. Every glaze in the game is asked for by name at some point, every form
+**Twenty-four story commissions** with named patrons, then endless standing
+orders. Every glaze in the game is asked for by name at some point, every form
 including the plate, and every clay body: a brief can tell you which clay to
 throw in, which is what a client who wants a translucent white plate is
-actually doing. Four clay bodies, twelve glazes and a handful of tools unlock
-as your standing rises. Every piece that survives goes on **the shelf**; every
+actually doing. The standing orders that follow the campaign start near where
+it left off rather than at a tenth of it, and they can ask for an atmosphere,
+a clay or an effect — but only for an effect the glaze they name can actually
+produce.
+
+**You buy the clay.** Every body has a price and it is charged by weight when
+you sit down with the ball, so the weight slider is a decision about money as
+well as size. Four clay bodies, twelve glazes and a handful of tools unlock as
+your standing rises. Every piece that survives goes on **the shelf**; every
 commission and every mistake adds a fragment to **the codex**. It all saves to
 `localStorage` — and an old save comes back to the job it was on, even though
 the campaign has since doubled in length under it.

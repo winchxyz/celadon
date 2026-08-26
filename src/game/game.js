@@ -822,8 +822,64 @@ export class Game {
    * player who cannot light the kiln can never get another mark, and
    * nothing in the interface tells them the game has ended.
    */
+  /**
+   * The cheapest firing the player can actually light.
+   *
+   * This used to be the cost of a 900-degree crash: the least a kiln can
+   * be run for by somebody working every slider down. But the sliders
+   * are not on screen unless the kiln has been taken by hand, and in
+   * guild mode the schedule is chosen for you — so the floor the ruin
+   * guard measured against was a firing the default player has no way to
+   * ask for. Advancing them up to it still left them short of the only
+   * firing on offer.
+   */
   _floorFiring() {
+    if (this.firingMode() === 'guild') {
+      const wanted = this.commission?.require?.glaze;
+      const on = (this.slots?.filter(Boolean).length ? this.slots.filter(Boolean)
+        : [GLAZE_BY_ID[wanted] ?? GLAZE_BY_ID[this.save.glazes[0]] ?? GLAZES[0]]);
+      return fuelCost(guildSchedule(on, this.clay?.metrics?.() ?? null, this.commission?.require));
+    }
     return fuelCost({ ...this.schedule, peak: 900, ramp: 320, soak: 0, reduction: 0, cooling: 'crash' });
+  }
+
+  /**
+   * What a ball of this clay costs.
+   *
+   * BODIES has carried a price since the beginning and the brief screen
+   * has printed it under every clay — "26 marks" under Reach Porcelain —
+   * and no coin has ever changed hands for it. The only three places the
+   * purse moved were the fuel advance, the fuel charge and the payout.
+   * A client who wants a translucent white plate is telling you which
+   * clay to buy, so there has to be something to buy it with.
+   *
+   * Priced by weight against an ordinary ball, because that is how clay
+   * is sold and because it gives the weight slider a second meaning.
+   */
+  clayCost(body = this.body, mass = this.mass) {
+    if (this.free || !body) return 0;
+    return Math.max(1, Math.round((body.price ?? 0) * mass / 1500));
+  }
+
+  /**
+   * Pay for the ball, once, when you sit down with it.
+   *
+   * Once per commission and not once per attempt: wedging the same ball
+   * again after a collapse is what a potter does with the clay already
+   * in front of them, and charging for it would turn a bad morning into
+   * a spiral. And the guard runs afterwards, because a purse that could
+   * pay for clay and then not for wood is a purse that has been walked
+   * into a wall by the game rather than by the player.
+   */
+  _buyClay() {
+    if (this.free || this._boughtClay) return 0;
+    const cost = this.clayCost();
+    if (cost <= 0) return 0;
+    this._boughtClay = true;
+    this.save.coin -= cost;
+    this.hud.setLedger(this.save);
+    this._fuelAdvance();
+    return cost;
   }
 
   /**
@@ -879,12 +935,13 @@ export class Game {
 
   nextCommission() {
     const s = this.save;
+    this._boughtClay = false;    // a new job is a new ball
     this._fuelAdvance();
     if (s.commission < COMMISSIONS.length) {
       this.commission = COMMISSIONS[s.commission];
     } else {
       s.proceduralN++;
-      this.commission = proceduralCommission(this.rng, s.proceduralN, s.glazes);
+      this.commission = proceduralCommission(this.rng, s.proceduralN, s.glazes, s.bodies);
     }
     this.state = ST.BRIEF;
     this.showBrief();
@@ -921,7 +978,7 @@ export class Game {
             ${bodies.map((b, i) => `
               <div class="glaze ${i === 0 ? 'sel' : ''}" data-b="${b.id}">
                 <span class="sw" style="background:#${b.color.toString(16).padStart(6, '0')}"></span>
-                <span><span class="gn">${b.name}</span><br><span class="gt">${b.price} marks · ${b.id === 'porcelain' ? 'unforgiving' : b.id === 'blackhill' ? 'strong' : 'forgiving'}</span></span>
+                <span><span class="gn">${b.name}</span><br><span class="gt"><b data-cost="${b.id}">${this.clayCost(b, this.mass)}</b> marks · ${b.id === 'porcelain' ? 'unforgiving' : b.id === 'blackhill' ? 'strong' : 'forgiving'}</span></span>
               </div>`).join('')}
           </div>
           <div id="body-desc" class="readout" style="margin:1em 0 1.4em;min-height:3.4em">${bodies[0]?.desc ?? ''}</div>
@@ -949,8 +1006,18 @@ export class Game {
     mi.addEventListener('input', () => {
       this.mass = parseInt(mi.value, 10);
       this.hud.ovInner.querySelector('#mv').textContent = `${this.mass} g`;
+      // clay is sold by weight, so the shelf has to re-price itself as
+      // the ball grows — otherwise the slider is spending money silently
+      for (const b of BODIES) {
+        const cell = this.hud.ovInner.querySelector(`[data-cost="${b.id}"]`);
+        if (cell) cell.textContent = String(this.clayCost(b, this.mass));
+      }
     });
-    this.hud.bind('[data-a="go"]', () => { this.audio.click(); this.startThrow(); });
+    this.hud.bind('[data-a="go"]', () => {
+      this.audio.click();
+      this._buyClay();
+      this.startThrow();
+    });
     this.hud.bind('[data-a="menu"]', () => this.openMenu());
   }
 

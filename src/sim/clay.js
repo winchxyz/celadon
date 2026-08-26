@@ -311,6 +311,13 @@ export class Clay {
       height: this.height,
       diameter: this.maxR * 2,
       mass: this.mass(),
+      /* The clay's own thermal expansion, carried through to the firing.
+         Every body in the game declares one — Blackhill 6.0, Ashstone
+         6.4, Saltflat 6.6, Reach Porcelain 6.9 — and fire() was reading
+         a flat 6.4 for all of them, so which clay a pot was thrown in
+         made no difference whatever to whether its glaze crazed. That
+         is the one property of a body a fired pot shows most plainly. */
+      coe: this.bodyDef?.coe,
       opened: this.isOpen(),
     };
   }

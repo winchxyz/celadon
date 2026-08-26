@@ -338,8 +338,71 @@ export function guildSchedule(glazes, body, req) {
   s.reduceFrom = 980;
   s.cooling = 'normal';
   s.holdHrs = 0;
+
+  /* And it fires for what it has been asked to produce.
+     Pinning the schedule to the maturing point makes a glaze into a
+     glass, which is what most briefs want and is why this exists. It is
+     also exactly wrong for the three that want something a straight
+     firing does not give: crystals need to be held on the way down,
+     oil spots need to be driven past maturity and then dropped, and a
+     raku lustre comes out of a kiln opened hot and starved. Left to the
+     plain schedule those three briefs could not be met at all in the
+     mode the game fires in by default — 0.09 against a gate of 0.40 for
+     the crystals — so a kiln master who could not do them would not be
+     much of a kiln master. */
+  const air = req?.atmos === 'oxidation';
+  const starve = (v) => { if (!air) s.reduction = Math.max(s.reduction, v); };
+
+  switch (req?.effect) {
+    case 'crystal':
+      // grown, not fired: reheated and held in the window where zinc
+      // silicate will nucleate, which is the whole of what 'Held' is for
+      s.cooling = 'slow'; s.holdHrs = 5; s.holdT = 1050;
+      break;
+    case 'oilspot':
+      // iron boiled out of the melt above maturity and frozen where it
+      // surfaced, so the kiln has to be taken over and then shut down
+      s.peak = Math.round(Math.max(s.peak, req.minPeak ?? s.peak + 45));
+      s.cooling = 'crash'; starve(0.85);
+      break;
+    case 'metal':
+      s.cooling = 'crash'; starve(0.85);
+      break;
+    case 'carbon':
+      // there is no carbon to trap in a kiln that is being fed: the
+      // smoke has to be there before the glaze closes over it
+      starve(0.8);
+      break;
+    case 'craze':
+      s.cooling = 'crash';
+      break;
+    default:
+      break;
+  }
   return s;
 }
+
+/**
+ * What each glaze can actually be asked to show.
+ *
+ * Not every effect is available on every glaze — hare's fur only happens
+ * in an iron saturate, a lustre only on a raku — and a brief that asks
+ * for one that cannot happen is a brief nobody can complete. This is the
+ * list of pairings that were measured coming out of the kiln on the
+ * Guild's own schedule, and the `campaign` bench fires every one of them
+ * again to make sure the list has not drifted away from the chemistry.
+ *
+ * Anything not named here has no effect a brief may ask for.
+ */
+export const EFFECTS_FOR = {
+  tenmoku: ['hare', 'oilspot'],
+  shino: ['carbon'],
+  chun: ['opal'],
+  crystal: ['crystal', 'craze'],
+  salt: ['peel'],
+  raku: ['metal', 'craze'],
+  oxblood: ['copperRed'],
+};
 
 export function scheduleHours(s) {
   const ramp = Math.max(1, s.peak - 20) / Math.max(30, s.ramp);
@@ -453,8 +516,19 @@ export function fire(layers, sched, body) {
       smoothstep(120, 40, Math.abs(s.holdT - 1075))
     );
 
+    /* Crazing is the difference between how much the glaze contracts on
+       the way down and how much the clay under it does. A glaze that
+       shrinks more than its body ends up in tension and lets go in a
+       net of cracks; one that shrinks less is squeezed and holds.
+       So the body's own expansion belongs in this line, and until now
+       it was not in it: every pot was fired against a flat 6.4 whatever
+       it had been thrown from. Reach Porcelain at 6.9 puts a celadon
+       into compression, which is exactly why the two have been fired
+       together for a thousand years, and Blackhill at 6.0 crazes things
+       that Ashstone leaves alone. */
+    const bodyCoe = body?.coe ?? BODY_COE;
     const craze = clamp01(
-      ((g.coe - BODY_COE) / 2.2) * melt *
+      ((g.coe - bodyCoe) / 2.2) * melt *
       (s.cooling === 'crash' ? 1.7 : s.cooling === 'slow' ? 0.35 : 1.0) *
       (g.craze ? 1.6 : 1)
     );
