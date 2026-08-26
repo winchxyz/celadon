@@ -8,6 +8,7 @@
 //  Run:  node src/dev/winnable.mjs
 // ============================================================
 
+import { readFileSync } from 'node:fs';
 import { Clay, NS } from '../sim/clay.js';
 import { clamp, clamp01 } from '../core/util.js';
 import { COMMISSIONS, FORMS, targetSize } from '../game/lore.js';
@@ -62,11 +63,35 @@ function drag(c, r0, y0, r1, y1, secs, omega = 8.4, jitter = 0.25) {
   }
 }
 
-function suggestedMass(req = {}) {
-  const { H, D, wall: w } = targetSize(req);
-  const rc = Math.max(0.6, D * 0.5 - w * 0.5);
-  const v = 6.283185 * rc * w * H * 0.86 + Math.PI * (D * 0.5) ** 2 * 0.8;
-  return clamp(Math.round(v * 1.92 * 1.10 / 25) * 25, 250, 3200);
+/* Imported, not copied.
+   This was a second implementation of the same formula, agreeing with
+   the game's by hand — 6.283185 written out where the real one uses
+   TAU, and the two constants inlined. It would have gone on agreeing
+   right up until somebody tuned one of them, and then this bench would
+   have carried on reporting that the campaign is winnable with a ball
+   the game never hands out. The whole point of the bench is to play
+   what the player plays. */
+const { suggestedMass } = await import('../game/game.js');
+
+/**
+ * The ball the brief asks for has to be one the player can dial.
+ *
+ * suggestedMass sets this.mass directly, and then the brief screen
+ * hands that number to a range input. If the input cannot represent it
+ * — out of range, or off the step — the player is shown a different
+ * ball from the one the brief was weighed against, with no way back to
+ * it. Three commissions were in that state, including the first one in
+ * the game: 500 g suggested against a control that started at 600.
+ *
+ * The control's numbers are read out of the source rather than written
+ * down again here, because writing them down again is how the two
+ * drifted apart in the first place.
+ */
+function sliderBounds() {
+  const src = readFileSync(new URL('../game/game.js', import.meta.url), 'utf8');
+  const m = src.match(/<input id="mass" type="range" min="(\d+)" max="(\d+)" step="(\d+)"/);
+  if (!m) throw new Error('winnable: could not find the mass slider in game.js');
+  return { min: +m[1], max: +m[2], step: +m[3] };
 }
 
 /** Play one brief, following what the coach would say at each moment. */
@@ -217,4 +242,20 @@ console.log(`   ${unexpected.length ? 'FAIL' : 'ok  '}  following the coach kill
   (unexpected.length ? ` — also died on: ${unexpected.map((d) => d.split(' ->')[0]).join(', ')}`
                      : ` (${deaths.length} death in ${COMMISSIONS.length} briefs, on the one that asks for 78)`));
 console.log('');
-process.exit(unexpected.length ? 1 : 0);
+/* ---- and every brief's ball is one the slider can be set to ---- */
+const sb = sliderBounds();
+const undialable = [];
+for (const c of COMMISSIONS) {
+  const g = suggestedMass(c.require);
+  if (g < sb.min) undialable.push(`${c.id} wants ${g}g, slider starts at ${sb.min}`);
+  else if (g > sb.max) undialable.push(`${c.id} wants ${g}g, slider stops at ${sb.max}`);
+  else if ((g - sb.min) % sb.step !== 0) undialable.push(`${c.id} wants ${g}g, off a ${sb.step}g step from ${sb.min}`);
+}
+console.log(`   ${undialable.length ? 'FAIL' : 'ok  '}  every brief's ball can be dialled `
+  + `(slider ${sb.min}-${sb.max} step ${sb.step})`
+  + (undialable.length ? `
+           ` + undialable.join(`
+           `) : ''));
+console.log('');
+
+process.exit(unexpected.length || undialable.length ? 1 : 0);

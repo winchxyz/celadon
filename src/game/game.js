@@ -1104,7 +1104,7 @@ export class Game {
           <div id="body-desc" class="readout" style="margin:1em 0 1.4em;min-height:3.4em">${bodies[0]?.desc ?? ''}</div>
           <div class="slider-row">
             <label>BALL WEIGHT <span id="mv">${this.mass} g</span></label>
-            <input id="mass" type="range" min="600" max="3200" step="50" value="${this.mass}">
+            <input id="mass" type="range" min="250" max="3200" step="25" value="${this.mass}">
           </div>
           <div class="readout">More clay means you can go bigger, and it costs more to be wrong.</div>
         </div>
@@ -2172,7 +2172,14 @@ export class Game {
       this.field.dip(1 - clamp01(this._dipFrac ?? 0.2), this.slotIndex, this.glazeThickness);
       this.field.upload();
       this.audio.splash(0.34);
-      this.hud.toast(`Dipped to ${Math.round(100 * clamp01(this._dipFrac ?? 0.8))}%.`, '', 1500);
+      /* The COATED fraction, not the dry one.
+         _dipFrac is the glaze line measured up from the foot, and a dip
+         coats everything ABOVE it — so with the line at 0.2 the pot
+         comes out four-fifths covered and this said "Dipped to 20%".
+         It was reporting the part that stayed out of the bucket. */
+      this.hud.toast(
+        `Dipped — ${Math.round(100 * (1 - clamp01(this._dipFrac ?? 0.2)))}% of the wall coated.`,
+        '', 1500);
       return;
     }
 
@@ -2918,6 +2925,15 @@ export function suggestedMass(req = {}) {
   const wallV = TAU * rc * w * H * 0.86;      // 0.86: the wall is not a cylinder
   const floorV = Math.PI * (D * 0.5) ** 2 * 0.8;
   const waste = 1.10;                          // trimmings and what stays on the hands
+  /* The bounds and the rounding here are the SLIDER's bounds and the
+     slider's step, and they were not. This clamps at 250 and rounds to
+     25 while the control was min=600 step=50, so three briefs asked for
+     a ball the player could not dial: the very first commission wants
+     500 g, the bowl at #5 wants 475 and the cup at #21 wants 400. The
+     game set this.mass to the suggestion and the slider showed 600,
+     and there was no way back to the number the brief was weighed
+     against — on a short brief that is not a handicap, it is
+     unsatisfiable, because a wall only gets thin by getting tall. */
   return clamp(Math.round((wallV + floorV) * 1.92 * waste / 25) * 25, 250, 3200);
 }
 
