@@ -639,10 +639,36 @@ float celIrid = S.irid;
          still a mirror. */
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp(celRough, 0.05, 1.0);')
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = clamp(celMetal, 0.0, 1.0);')
+      /* No specular-antialiasing term here. three already computes one of
+         its own — geometryRoughness, taken from the derivatives of the
+         geometric normal and added to material.roughness a few lines
+         below — so the copy that briefly lived here was a weaker
+         duplicate, and measured, it did not bring the peak down. */
       .replace('#include <normal_fragment_maps>', /* glsl */`
 normal = bumpNormal(normal, -vViewPosition, celBump * 0.012, 1.0);
 `)
       .replace('#include <emissivemap_fragment>', 'totalEmissiveRadiance += celEmis;')
+      /* Damp earth does not glow.
+         Reported as sparkles along the throwing rings and a white halo
+         round the whole pot, and measured rather than guessed at: the
+         silhouette of WET, UNFIRED clay reached a luminance of 27 in the
+         HDR buffer against a bloom threshold of 1.02, and bloom turned
+         those pixels into the halo. It is not one light — switching each
+         off in turn, the three directional lamps contribute 10.1, 8.9
+         and 5.1 of it — and it is not shininess either: specularIntensity
+         is already 0.05, which is as matt as the material gets. It is the
+         Fresnel term at a grazing angle, which climbs whatever the
+         material is made of, on a surface curving away faster than one
+         sample per pixel can average.
+         Chasing that through the BRDF is the wrong fight. A pot with
+         water still in it is not a light source, and the honest statement
+         of that is a ceiling on what it may emit. Fired glaze IS glossy
+         and is allowed its highlight, so the ceiling lifts as the piece
+         comes out of the kiln. 0.92 sits just under the bloom's 1.02. */
+      .replace('#include <opaque_fragment>', /* glsl */`
+outgoingLight = min(outgoingLight, vec3(mix(0.92, 24.0, uFired)));
+#include <opaque_fragment>
+`)
       ;
 
     /* ================= THE PHYSICAL LIGHTING CHUNKS =================
