@@ -122,13 +122,19 @@ check('the coach says something', !!hudLog.coach, `"${(hudLog.coach || '').slice
 
 // ---- 8. nothing died -----------------------------------------------
 {
-  // The mark under the hand is a BAND right round the pot, because the
-  // wheel is turning and a hand held against it touches the whole ring.
-  // It therefore has no side to be on — which is the point: the old
-  // spot had to choose one, so it jumped across the piece whenever the
-  // cursor crossed the middle, and sat on the outer wall while the hand
-  // was working inside the bore. What it must still do is follow the
-  // hand UP AND DOWN the profile, and ignore the wheel entirely.
+  // The mark under the hand is a HAND, drawn into the clay as a
+  // silhouette. It used to be a band right round the pot, and the
+  // reason mattered: a band has no side, so it could not do what the
+  // spot before it did — jump across the piece as the cursor crossed
+  // the middle, and sit on the outer wall while the hand worked down
+  // the bore.
+  //
+  // A hand shape cannot be sideless, so the side is TOLD to it from the
+  // hand's own position rather than guessed at: 4 means outside, 5
+  // means inside. That keeps what the band was protecting, and this
+  // check is written to prove it — the mark must follow the hand up and
+  // down the profile, ignore the wheel entirely, and be on the same
+  // face the hand is.
   const u = game.mat.userData.u;
   const [xl, yl] = aim(game.clay.maxR * 0.9, 2.0);
   point(xl, yl); step(3);
@@ -144,10 +150,23 @@ check('the coach says something', !!hudLog.coach, `"${(hudLog.coach || '').slice
   const turned = Math.abs(game.pot.rotation.y - spun0) / (Math.PI * 2);
   const wobble = Math.max(...held) - Math.min(...held);
 
+  const shapeIsHand = u.uCursorBand.value === 4 || u.uCursorBand.value === 5;
   check('the mark follows the hand and ignores the wheel',
-    u.uCursorBand.value === 1 && high - low > 0.15 && turned > 0.25 && wobble < 0.02,
+    shapeIsHand && high - low > 0.15 && turned > 0.25 && wobble < 0.02,
     `band=${u.uCursorBand.value}, arc ${low.toFixed(2)} -> ${high.toFixed(2)} up the wall, ` +
     `${turned.toFixed(2)} rev of wheel moved it ${wobble.toFixed(3)}`);
+
+  /* ...and the case the band existed to cover: a hand down the bore
+     must be marked on the INSIDE, not left printed on the outer wall. */
+  const [xo, yo] = aim(game.clay.maxR * 0.9, Math.max(3, game.clay.height * 0.5));
+  point(xo, yo); step(3);
+  const outsideBand = u.uCursorBand.value;
+  const [xi, yi] = aim(Math.max(0.4, game.clay.maxR * 0.2), Math.max(3, game.clay.height * 0.5));
+  point(xi, yi); step(3);
+  const insideBand = u.uCursorBand.value;
+  check('the mark is on the face the hand is on',
+    outsideBand === 4 && insideBand === 5,
+    `hand on the wall -> ${outsideBand} (want 4), hand in the bore -> ${insideBand} (want 5)`);
 }
 
 // ---- dragging down brings a too-tall pot back down ------------------

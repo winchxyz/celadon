@@ -1494,8 +1494,8 @@ export class Game {
     // Which face the hand is on decides which end of the profile the
     // mark belongs at — the outer and inner faces of one ring are a
     // wall's thickness apart in space and half a profile apart in arc.
-    this.tool.arcT = this.pb.nearest(this.tool.r, this.tool.y,
-      this.tool.r >= (ri + ro) * 0.5).arcT;
+    this.tool.outside = this.tool.r >= (ri + ro) * 0.5;
+    this.tool.arcT = this.pb.nearest(this.tool.r, this.tool.y, this.tool.outside).arcT;
     this.tool.contact = Hand.contact(c, this.tool.r, this.tool.y, ro);
 
     const tId = this.quickWater ? 'water' : this.toolId;
@@ -1628,7 +1628,13 @@ export class Game {
        Size is in centimetres of surface: a hand is about 9 cm across a
        palm, and it grows a little as you press. */
     u.uArcLen.value = this.pb.arcLen || 24;
-    u.uCursorBand.value = HAND_SHAPE;
+    /* Which face the hand is on comes from the hand, not from a guess.
+       The mark this replaced was a band right round the pot precisely
+       so it would have NO side — a mark that has to choose one used to
+       jump across the piece as the cursor crossed the middle, and sat
+       on the outer wall while the hand was working down the bore. A
+       hand shape cannot be sideless, so it is told: 4 outside, 5 in. */
+    u.uCursorBand.value = HAND_SHAPE + (this.tool.outside ? 0 : 1);
     u.uCursor.value.set(this._localAngle(this.tool.angle), this.tool.arcT,
       4.6 + 1.1 * this.tool.press, this.tool.contact * 0.85 + 0.08);
 

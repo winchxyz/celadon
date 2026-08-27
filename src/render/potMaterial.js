@@ -585,12 +585,17 @@ if (uStressView > 0.01) {
     vec2 hp = vec2((fract(vAng - uCursor.x + 0.5) - 0.5) * 6.2831853 * max(vRad, 0.25),
                    (vArc - uCursor.y) * uArcLen) / max(uCursor.z, 1e-3);
     handMask = celSdHand(hp);
-    /* Outside only. Every other mark shape carries this test and the
-       hand did not, so it drew on the bore as well — and since the
-       meridian runs up the outer wall, over the rim and back DOWN the
-       inside, a hand resting plainly on the outside had a twin printed
-       within. vSide: 0 outer, 1 rim, 2 inner, 3 base. */
-    if (vSide > 1.5) handMask = 9.0;
+    /* On the face the hand is actually on, and only that one.
+       The meridian runs up the outer wall, over the rim and back DOWN
+       the inside, so without this a hand resting plainly on the outside
+       had a twin printed within the bore. Restricting it to the OUTSIDE
+       would have been the other error: the band this replaced was
+       chosen to have no side at all, because a mark that picks one used
+       to sit outside while the hand worked down the neck. The side
+       comes in with the shape: 4 outside, 5 inside. */
+    float wantInside = step(4.5, uCursorBand);
+    float isInside = step(1.5, vSide);
+    if (abs(isInside - wantInside) > 0.5) handMask = 9.0;
     d = 9.0;                  // the ring code below draws nothing for a hand
   } else if (uCursorBand > 2.5) {
     // POUR: a ribbon down one side, starting where you point. Nothing
