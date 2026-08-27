@@ -333,6 +333,8 @@ export class Game {
         }
         this._pinch = this._pinchStart = touchGeometry();
         this._movedSince = new Set();
+        this._bandAccum = 0;
+        this._bandT = undefined;
         this._gesture = null;
         this.pointer.right = true;
         return true;
@@ -341,6 +343,8 @@ export class Game {
       if (this._touches.size > 2) {
         this._pinch = this._pinchStart = touchGeometry();
         this._movedSince = new Set();
+        this._bandAccum = 0;
+        this._bandT = undefined;
         this._gesture = null;
         return true;
       }
@@ -409,7 +413,31 @@ export class Game {
         if (this.state === ST.GLAZE) {
           // in the glaze room the pot turns on its wheel instead
           this.pot.rotation.y += dx * BAND_RAD_PER_PX;
-          this._bandV = clamp(dx * BAND_RAD_PER_PX * 22, -BAND_MAX, BAND_MAX);
+          /* The same sum the mouse does, instead of a stand-in for it.
+             `* 22` is what you write when you mean "divide by the time
+             that passed" and do not have it to hand: it is right only if
+             events arrive 45ms apart. They arrive every 16ms at 60Hz and
+             every 8 at 120, so a flick of the pot under a thumb carried
+             about a third of the speed the same flick carried under a
+             mouse, and a different third on a different screen. */
+          /* One measurement per frame, not one per finger.
+             Copying the mouse's sum straight across was not enough:
+             touch delivers an event per finger, so the second of each
+             pair arrives with a gap of about zero and dividing by it
+             sent the velocity through the clamp — measured, a gentle
+             drag that gave the mouse 1.32 rad/s gave the thumb the full
+             3.2. The movement is accumulated and folded in once enough
+             real time has passed to divide by, which is what the mouse
+             path gets for free by only ever firing once. */
+          const tNow = performance.now();
+          this._bandAccum = (this._bandAccum ?? 0) + dx;
+          const gap = tNow - (this._bandT ?? (tNow - 16));
+          if (gap >= 8) {
+            const v = this._bandAccum * BAND_RAD_PER_PX / (gap / 1000);
+            this._bandV = clamp((this._bandV ?? 0) * 0.6 + v * 0.4, -BAND_MAX, BAND_MAX);
+            this._bandT = tNow;
+            this._bandAccum = 0;
+          }
           this.eng.rig.orbit(0, dy);
         } else {
           this.eng.rig.orbit(dx, dy);
@@ -431,6 +459,8 @@ export class Game {
       if (this._touches.size >= 2) {
         this._pinch = this._pinchStart = touchGeometry();
         this._movedSince = new Set();
+        this._bandAccum = 0;
+        this._bandT = undefined;
         this._gesture = null;
         return true;
       }
@@ -1409,6 +1439,8 @@ export class Game {
       water: (this.quickWater || this.toolId === 'water') && this.pointer.down ? 1 : 0,
       musicOn: this.save.settings.music,
     });
+    // the shortcut lasts exactly one frame, and the mixer has now had it
+    this.quickWater = false;
 
     this.eng.grade.uniforms.uHaze.value = damp(
       this.eng.grade.uniforms.uHaze.value,
@@ -1543,7 +1575,11 @@ export class Game {
         c.nudge(this.tool.y, Math.min(0.04, (radial - 6) * 0.001) * p * clamp01(this.omega / 8), 2.2);
       }
     }
-    this.quickWater = false;
+    /* Not here. The state switch in update() runs BEFORE the audio
+       mixer, so clearing the flag inside _updateThrow meant the mixer
+       never once saw it true — the quick-water sound has never played
+       from the shortcut, only from picking the tool. Cleared at the end
+       of the frame instead, after everything that reads it. */
 
     // ---- the needle levels the rim on a click -----------------------
     if (tId === 'needle' && this.pointer.down && !this._needleDone && this.tool.contact > 0.3) {
@@ -1788,6 +1824,17 @@ export class Game {
     this.eng.rig.kick(0.9);
     this.hud.toast(this.clay.deadReason, 'bad', 8000);
     this.save.stats.collapses++;
+    /* Losing it because it was soaked is its own lesson, and the codex
+       has a fragment about exactly that — "On too much water" — gated on
+       stats.drowned. Nothing has ever incremented that counter, in any
+       version, so the fragment could not be reached: it was written,
+       shipped and unreachable.
+       The threshold is measured, not picked. Fresh clay reads 0.62 mean
+       moisture and dries toward 0.563 if left alone; working it with the
+       water tool at a normal rate reaches 0.732, and soaking it
+       continuously saturates at 0.82. 0.75 is above anything you arrive
+       at without deliberately drowning it. */
+    if ((this.clay?.metrics?.().moisture ?? 0) > 0.75) this.save.stats.drowned++;
     this.omegaTarget = 0;
     setTimeout(() => this._collapsedOverlay(), 1300);
   }
@@ -2593,7 +2640,12 @@ export class Game {
     this.pot.position.set(0, 0, 0);
 
     this._applyResults();
-    setTimeout(() => this.showReport(), 1500);
+    /* Held, so it can be cancelled. Enter during the reveal calls
+       showReport() straight away (the ST.REVEAL case in _onEnter), and
+       this timer then fired 1.5s later and opened the card a SECOND
+       time — over whatever the player had moved on to. */
+    clearTimeout(this._revealTimer);
+    this._revealTimer = setTimeout(() => this.showReport(), 1500);
   }
 
   _applyResults() {
@@ -2673,6 +2725,9 @@ export class Game {
   }
 
   showReport() {
+    // whoever gets here first cancels the other route
+    clearTimeout(this._revealTimer);
+    this._revealTimer = null;
     const r = this.report;
     const gr = r.grade;
     const unl = this._newUnlocks ?? [];

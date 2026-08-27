@@ -705,12 +705,24 @@ normal = bumpNormal(normal, -vViewPosition, celBump * 0.012, 1.0);
       ['material.clearcoat = clearcoat;', 'material.clearcoat = clamp(celClear, 0.0, 1.0);'],
       ['material.clearcoatRoughness = clearcoatRoughness;',
         'material.clearcoatRoughness = clamp(celClearR, 0.02, 1.0);'],
+      /* And iridescence, which was computed and thrown away.
+         S.irid is set from metal * uFired at line 459 and read into
+         celIrid — and celIrid appears exactly once in the whole shader,
+         on the line that declares it. Nothing consumed it, and
+         mat.iridescence was never enabled either, so the code path was
+         not even compiled in. The lustre on a raku metal surface has
+         never once been drawn. */
+      ['material.iridescence = iridescence;', 'material.iridescence = clamp(celIrid, 0.0, 1.0);'],
     ]);
   };
 
-  // force clearcoat + iridescence code paths to compile
+  /* Force the clearcoat AND iridescence code paths to compile.
+     The comment said both and the code enabled only clearcoat, so the
+     iridescence chunk was never in the shader for anything to patch. */
   mat.clearcoat = 1.0;
   mat.clearcoatRoughness = 0.1;
+  mat.iridescence = 1.0;
+  mat.iridescenceIOR = 1.6;
 
   return mat;
 }

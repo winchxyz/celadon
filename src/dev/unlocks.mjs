@@ -18,7 +18,8 @@
 //  Run:  node src/dev/unlocks.mjs
 // ============================================================
 
-import { COMMISSIONS, BODIES, FORMS, proceduralCommission } from '../game/lore.js';
+import { readFileSync } from 'node:fs';
+import { COMMISSIONS, BODIES, FORMS, CODEX, proceduralCommission } from '../game/lore.js';
 import { GLAZES, GLAZE_BY_ID, EFFECTS_FOR } from '../sim/glaze.js';
 import { blankSave } from '../game/save.js';
 
@@ -122,6 +123,45 @@ if (onTheEdge.length) {
 }
 
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+console.log(NL + '  --- the codex, which is also a set of locks ---');
+
+/* A fragment gated on a counter nothing ever increments is a piece of
+   writing that ships and can never be read. That is exactly what
+   happened to "On too much water": it hangs on stats.drowned, and no
+   line in any version of this game had ever touched that field. The
+   gate reads fine, the fragment exists, and the player never sees it.
+   Reading the gates and looking for a write site catches the whole
+   class, not just the one instance. */
+const src = [
+  'src/game/game.js', 'src/game/save.js', 'src/game/scoring.js', 'src/sim/clay.js',
+].map((f) => readFileSync(new URL('../../' + f, import.meta.url), 'utf8')).join(NL);
+
+const unreachable = [];
+const gateFields = [];
+for (const frag of CODEX) {
+  const body = String(frag.when);
+  // every gate is of the form (s) => s.<path> <op> <n>
+  const m = body.match(/s\.((?:[A-Za-z_$][\w$]*)(?:\.[A-Za-z_$][\w$]*)*)/);
+  if (!m) { unreachable.push(`${frag.id}: gate reads no save field at all`); continue; }
+  const path = m[1];
+  const leaf = path.split('.').pop();
+  gateFields.push(`${frag.id} -> s.${path}`);
+  // a write is an increment or an assignment to that leaf somewhere in the game
+  // plain substring tests, because a regex built through three layers
+  // of quoting is how the last one arrived broken
+  const written = src.includes('.' + leaf + '++')
+    || src.includes('.' + leaf + ' +=')
+    || src.includes('.' + leaf + ' =')
+    || src.includes('.' + leaf + '=');
+  if (!written) unreachable.push(`${frag.id}: nothing ever writes ${leaf}`);
+}
+
+for (const g of gateFields) console.log(`       ${g}`);
+ok(unreachable.length === 0,
+  `all ${CODEX.length} codex fragments can be reached`
+  + (unreachable.length ? NL + '           ' + unreachable.join(NL + '           ') : ''));
+
 console.log(NL + '  --- and the endless work after it ---');
 
 /* The procedural generator is handed the unlocked sets, so it must not
