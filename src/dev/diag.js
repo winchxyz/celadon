@@ -12,7 +12,7 @@
 //  actually exists between a tablet and whoever is fixing it.
 // ============================================================
 
-export const BUILD = '2026-08-27.12';
+export const BUILD = '2026-08-27.13';
 
 /**
  * Notice when the server has a newer build than this tab is running.
@@ -83,6 +83,26 @@ export function makeDiag(eng, game, hud) {
       el.innerHTML =
         '<h4>◍ What this device is doing</h4>'
         + row('build', BUILD)
+        /* The boot time, on the device, where the only honest
+           measurement of it can be taken. It cannot be probed from
+           outside the page — anything injected after load has already
+           missed it — and a browser pane that is not compositing is not
+           a tablet. So the game times itself and shows the number, and
+           it can be photographed like everything else here. */
+        + row('opened in', window.CELADON_BOOT_MS != null
+          ? `${(window.CELADON_BOOT_MS / 1000).toFixed(1)}s` : 'unknown',
+          (window.CELADON_BOOT_MS ?? 0) > 8000)
+        + (window.CELADON_BOOT_MARKS
+          ? row('slowest part', (() => {
+            const m = window.CELADON_BOOT_MARKS;
+            let worst = ['', 0];
+            for (let i = 1; i < m.length; i++) {
+              const took = m[i][1] - m[i - 1][1];
+              if (took > worst[1]) worst = [m[i - 1][0], took];
+            }
+            return `${worst[0]} ${(worst[1] / 1000).toFixed(1)}s`;
+          })())
+          : '')
         + row('screen', `${innerWidth} x ${innerHeight}  dpr ${dpr}`)
         + row('100vh says', `${Math.round(document.documentElement.clientHeight)}px`,
           Math.abs(document.documentElement.clientHeight - innerHeight) > 4)

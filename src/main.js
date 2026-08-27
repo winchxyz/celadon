@@ -16,7 +16,11 @@ const boot = document.getElementById('boot');
 const bootBar = document.querySelector('#boot-bar i');
 const bootStatus = document.getElementById('boot-status');
 
+const BOOT_MARKS = [];
+const mark = (label) => BOOT_MARKS.push([label, Math.round(performance.now())]);
+
 function step(p, msg) {
+  mark(msg || 'step');
   if (bootBar) bootBar.style.width = `${Math.round(p * 100)}%`;
   if (bootStatus && msg) bootStatus.textContent = msg;
   // deliberately not requestAnimationFrame: if the tab is backgrounded
@@ -149,6 +153,17 @@ async function main() {
   }
 
   await step(1.0, 'ready');
+  /* How long the shed took to open, said out loud.
+     There is no way to measure this from outside the page — a probe
+     injected after load has already missed it — and "how quickly does
+     it start" is a question worth being able to answer with a number
+     rather than a shrug. performance.now() is measured from navigation
+     start, so this IS the time from following the link to being able
+     to touch the clay. */
+  mark('ready');
+  window.CELADON_BOOT_MARKS = BOOT_MARKS;
+  window.CELADON_BOOT_MS = Math.round(performance.now());
+  console.info(`celadon: ready in ${window.CELADON_BOOT_MS}ms`);
 
   // one gesture is enough to start the audio context
   const kick = () => { audio.init(); audio.resume(); audio.setMuted(!game.save.settings.sound); };
