@@ -240,7 +240,17 @@ html,body{
   left:calc(var(--pad)*1.4);
   top:calc(var(--top-h) + var(--pad)*0.6);
   width:min(340px,30vw);
-  max-height:calc(var(--vh) - var(--top-h) - var(--bar-h) - var(--belt-h) - var(--pad)*3);
+  /* The tool belt is not in this column, so it does not cost this
+     panel any height. Measured at 1280x720: the brief spans x 25-365
+     and the belt spans 500-780 — they do not overlap horizontally at
+     all, and neither does the coach line. Only the hint bar runs the
+     full width. Reserving --belt-h here was 78px held back for
+     something standing somewhere else, and it cost the brief with the
+     most conditions one of them: c14 has eight requirements, needs
+     468px, and was given 411 with 181px of screen going spare below.
+     Below 900px wide this panel is hidden entirely, so there is no
+     width at which the belt can reach it. */
+  max-height:calc(var(--vh) - var(--top-h) - var(--bar-h) - var(--pad)*3);
   /* A column that gives way in a chosen order, instead of a scrollbar.
      What the brief IS — the title, the shape it wants and the list of
      numbers it will be judged against — is the part you have to be able
@@ -266,7 +276,16 @@ html,body{
   mask-image:linear-gradient(to bottom,#000 62%,transparent 100%);
   -webkit-mask-image:linear-gradient(to bottom,#000 62%,transparent 100%);
 }
-#com-reqs{list-style:none;display:flex;flex-direction:column;gap:.5em}
+/* The brief holds its size; only the quote yields.
+   Making #commission a flex column and letting #com-text shrink was
+   half the job: every flex child shrinks by default, so the panel took
+   the overflow out of the requirement list as well. Measured on c14,
+   the brief with the most conditions — eight of them — at 1280x720:
+   469px of content into a 410px panel, and one requirement clipped
+   away under overflow:hidden with no way to reach it. The requirements
+   are the brief. Losing one is losing the job. */
+#com-reqs{list-style:none;display:flex;flex-direction:column;gap:.5em;flex:0 0 auto}
+#com-title, #com-from, #formview, #silho-key{flex:0 0 auto}
 #com-reqs li{
   display:flex;gap:.6em;align-items:baseline;
   font:400 11.5px/1.4 var(--sans);color:var(--ink-dim);letter-spacing:.02em;
@@ -1070,6 +1089,20 @@ body.grabbing canvas#gl{cursor:none}
   #com-text{ font-size:11.5px; line-height:1.55; }
   #com-reqs{ gap:.35em; }
 }
+/* Below this the brief cannot have everything, so it is told what to
+   drop. At 600px tall the panel gets 393px, and c14's eight conditions
+   plus the diagram plus the quote come to 462 — two requirements were
+   going over the edge. The client's speech goes first, then the diagram
+   gets smaller; the list of things you are being judged on stays whole,
+   because that is the job.
+   AFTER the 760 block, so it wins where both apply. */
+@media (max-height:640px){
+  #com-text{ display:none; }
+  #formview canvas{ max-height:96px; }
+  #com-reqs{ gap:.3em; }
+}
+
+
 
 /* ------------------------------------------------------------------ */
 /*  Short windows                                                      */
