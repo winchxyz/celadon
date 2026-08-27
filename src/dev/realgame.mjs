@@ -18,7 +18,16 @@ globalThis.window = {
   addEventListener: (k, f) => listeners.set(k, f),
   removeEventListener: () => {},
 };
+const classListStub = () => ({
+  add() {}, remove() {}, toggle() {}, contains() { return false },
+});
 globalThis.document = {
+  /* A browser always has one, and the game reaches for it to put the
+     grabbing-cursor class somewhere. Leaving it out here does not make
+     the harness minimal, it makes it wrong: game.js was right to assume
+     document.body exists and this stub was the thing that did not. */
+  body: { classList: classListStub(), style: {} },
+  documentElement: { style: { setProperty() {} }, classList: classListStub() },
   querySelector: () => null,
   getElementById: () => null,
   createElement: () => ({ getContext: () => null, style: {}, classList: { add() {}, remove() {}, toggle() {} } }),
