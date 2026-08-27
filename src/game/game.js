@@ -2696,7 +2696,7 @@ export class Game {
 
     // shelf
     if (!r.destroyed && r.total >= 30) {
-      s.gallery.push({
+      const entry = {
         name: this.commission.title,
         form: this.commission.require?.form ?? 'jar',
         grade: r.grade.g,
@@ -2713,7 +2713,22 @@ export class Game {
           peak: this.schedule.peak, reduction: this.schedule.reduction, cooling: this.schedule.cooling,
           soak: this.schedule.soak, holdHrs: this.schedule.holdHrs, holdT: this.schedule.holdT,
         },
-      });
+      };
+      s.gallery.push(entry);
+
+      /* The thumbnail above goes in immediately so the entry is never
+         half-written, and the real thing replaces it a few milliseconds
+         later. CompressionStream is async and there is no synchronous
+         way to deflate; 8ms is nothing, but it cannot be waited for
+         inside a function that has to return a saved game.
+         If it is not available — Safari before 16.4 — the thumbnail
+         simply stays, and the piece on the shelf is drawn a little
+         softer than it came out. Nothing breaks either way. */
+      this.field.snapshotExact().then((exact) => {
+        if (!exact) return;
+        entry.field = exact;
+        SaveIO.save(s);
+      }).catch(() => { /* the thumbnail is already good */ });
     }
     SaveIO.save(s);
     this.hud.setLedger(s);

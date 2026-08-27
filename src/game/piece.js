@@ -18,22 +18,16 @@ import { GLAZE_BY_ID, SLOTS, fire as fireGlaze } from '../sim/glaze.js';
 import { BODIES } from './lore.js';
 import { applyFireResult } from '../render/potMaterial.js';
 
-/** Put a saved piece back on the pot mesh, exactly as it came out. */
-export function dressPot(game, p) {
-  const c = Clay.fromSnapshot(p.clay);
-  game.pb.build(c);
-
-  game.field.restore(p.field);
-  game.field.upload?.();
-
-  const body = BODIES.find((b) => b.id === p.body) ?? BODIES[0];
-  const glazes = [0, 1, 2].map((i) => GLAZE_BY_ID[p.glazes?.[i]] ?? null);
-
-  /* Re-fire it to get the surface back.
-     The look is a function of the schedule and of how much glaze was
-     actually on the pot, and the second half of that is not in the save
-     as a number — but it is in the field, which IS saved, so it is
-     measured back off the restored field rather than guessed at. */
+/**
+ * Fire the surface from whatever is in the field right now.
+ *
+ * Split out because it runs twice: once on the thumbnail, so there is
+ * something correct on the wheel immediately, and again on the exact
+ * field when the inflate lands. Coverage and thickness are measured off
+ * the field rather than stored as numbers, so the fired look has to be
+ * recomputed when the field changes underneath it.
+ */
+function surface(game, c, body, glazes, schedule) {
   const gs = game.field.stats();
   const layers = [];
   for (let i = 0; i < SLOTS; i++) {
@@ -44,10 +38,62 @@ export function dressPot(game, p) {
       meanThick: gs.meanThick?.[i] ?? 0.12,
     });
   }
+  const sch = schedule ?? game._viewing?.fire ?? {};
   const res = layers.length
-    ? fireGlaze(layers, { ...(p.fire ?? {}) }, { meanWall: c.metrics().meanWall, body })
+    ? fireGlaze(layers, { ...sch }, { meanWall: c.metrics().meanWall, body })
     : null;
   applyFireResult(game.mat, res, glazes);
+  return res;
+}
+
+/**
+ * Put a saved piece back on the pot mesh, exactly as it came out.
+ *
+ * "Exactly" is now the literal claim. Pieces fired since the exact
+ * snapshot went in carry the whole 192x160 field deflated, and it is
+ * read back byte for byte; older ones, and any saved where
+ * CompressionStream was missing, still carry the 64x48 thumbnail and
+ * come back a little softer, which is the best that data allows.
+ *
+ * The thumbnail is applied first either way, so the pot on the wheel is
+ * right immediately, and the exact field replaces it a few milliseconds
+ * later when the inflate finishes — the surface is re-fired from it,
+ * because coverage and thickness are measured off the field and the
+ * fired look follows from those.
+ */
+export function dressPot(game, p) {
+  const c = Clay.fromSnapshot(p.clay);
+  game.pb.build(c);
+  /* The field has to be told which pot it is on.
+     bindProfile is what gives it mY, mSide and mDown — the meridian the
+     glaze lies along — and without it the restored field was being read
+     against the meridian of whatever was on the wheel a moment ago.
+     Coverage came out 0.8169 for a pot fired at 0.7702, which is not a
+     rounding error, it is the wrong pot's geometry. */
+  game.field.bindProfile(game.pb);
+
+  if (p.field && p.field.v === 2) {
+    /* An exact snapshot can only be read back asynchronously, and the
+       legacy restore() bails on it — it tests for `.d` and this has
+       `.z` — leaving whatever was in the field untouched. That meant the
+       live pot's glaze appeared on the shelf piece's shape for the few
+       milliseconds before the inflate landed: not a blank moment, a
+       WRONG one. Clearing first makes the intermediate state honest. */
+    game.field.data.fill(0);
+  } else {
+    game.field.restore(p.field);
+  }
+  game.field.upload?.();
+
+  const body = BODIES.find((b) => b.id === p.body) ?? BODIES[0];
+  const glazes = [0, 1, 2].map((i) => GLAZE_BY_ID[p.glazes?.[i]] ?? null);
+
+  /* Re-fire it to get the surface back.
+     The look is a function of the schedule and of how much glaze was
+     actually on the pot, and the second half of that is not in the save
+     as a number — but it is in the field, which IS saved, so it is
+     measured back off the restored field rather than guessed at. */
+  const res = surface(game, c, body, glazes, p.fire);
 
   const u = game.mat.userData.u;
   u.uFired.value = 1; u.uWet.value = 0;
@@ -55,6 +101,15 @@ export function dressPot(game, p) {
   u.uCursor.value.set(-9, -9, 0, 0);
   u.uBodyCol.value.set(body.color);
   u.uBodyCol2.value.set(body.color2);
+
+  /* ...and then the real thing, if this piece has one. */
+  if (p.field && p.field.v === 2) {
+    game.field.restoreExact(p.field).then((got) => {
+      if (!got || game._viewing !== p) return;   // they have moved on
+      game.field.upload?.();
+      surface(game, c, body, glazes);
+    }).catch(() => { /* the thumbnail is already on the wheel */ });
+  }
 
   return { clay: c, body, glazes: glazes.filter(Boolean), fireResult: res };
 }
