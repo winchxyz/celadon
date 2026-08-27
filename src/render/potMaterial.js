@@ -189,6 +189,36 @@ uniform vec4 uSlotP[CEL_SLOTS], uSlotQ[CEL_SLOTS], uSlotR[CEL_SLOTS], uSlotS[CEL
 uniform float uFired, uCrystalScale, uCrystalSize, uCrazeScale, uRunSmear;
 uniform float uHeat, uTemp, uSoot, uStressView, uGuide, uOpacity, uClayGlow;
 uniform vec4 uCursor;
+/* ---- the hand mark ------------------------------------------------ */
+float celSdSeg(vec2 p, vec2 a, vec2 b, float r){
+  vec2 pa = p - a, ba = b - a;
+  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+  return length(pa - ba * h) - r;
+}
+/* Smooth union. k is how much the two shapes melt into each other, and
+   it is the whole difference between a hand and a bundle of sticks. */
+float celSmin(float a, float b, float k){
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}
+/* p is in hand-lengths: 0 at the middle knuckle, +y toward the tips.
+   Proportions are a real hand's — middle longest, then ring, index,
+   little; thumb short, thick, and set low and wide. */
+float celSdHand(vec2 p){
+  /* k, the blend radius, has to be SMALL against the finger radius or
+     the fingers melt into the palm and the whole thing is a bean. The
+     first version used 0.075 against a finger of 0.082 and that is
+     exactly what it drew. 0.022 keeps the knuckles soft and the fingers
+     separate. */
+  const float K = 0.022;
+  float d = celSdSeg(p, vec2(0.015, -0.44), vec2(0.0, -0.02), 0.250);   // palm
+  d = celSmin(d, celSdSeg(p, vec2(-0.205, 0.010), vec2(-0.285, 0.430), 0.070), K); // index
+  d = celSmin(d, celSdSeg(p, vec2(-0.062, 0.045), vec2(-0.090, 0.580), 0.074), K); // middle
+  d = celSmin(d, celSdSeg(p, vec2( 0.082, 0.035), vec2( 0.125, 0.500), 0.070), K); // ring
+  d = celSmin(d, celSdSeg(p, vec2( 0.205,-0.020), vec2( 0.288, 0.300), 0.060), K); // little
+  d = celSmin(d, celSdSeg(p, vec2(-0.190,-0.280), vec2(-0.505, 0.030), 0.096), K * 1.6); // thumb
+  return d;
+}
 uniform float uArcLen, uCursorBand;
 varying float vAng, vArc, vSecT, vSide, vCurv, vMoist, vScar, vStress, vRad, vHgt, vRing;
 varying vec3 vLocal;
@@ -533,11 +563,36 @@ if (uStressView > 0.01) {
   // Drawn as circles those became a 2.4 cm and a 7.2 cm disc -- and on a
   // pot with 27 cm of wall the spray disc swallowed the vessel, which is
   // what made the tools look broken. They were not; the mark was.
+  /* A HAND, not a halo.
+     The mark used to be a circle, a band or a curtain — shapes that say
+     "somewhere around here" and nothing else. What is actually touching
+     the clay is a hand, and there is no reason the pot cannot show one:
+     this is a shader, the mark is a hundred pixels across, and a signed
+     distance field has no resolution to run out of.
+     Built from capsules joined with a SMOOTH minimum, which is what
+     makes a palm flow into a finger instead of meeting it at a seam.
+     Every earlier attempt at this failed for want of exactly that. */
   float dbCm = abs(vArc - uCursor.y) * uArcLen;
   float dAng = abs(fract(vAng - uCursor.x + 0.5) - 0.5);   // turns, 0..0.5
   float daCm = dAng * 6.2831853 * max(vRad, 0.25);
   float d;
-  if (uCursorBand > 2.5) {
+  float handMask = -1.0;      // <0 means "no hand this frame"
+  if (uCursorBand > 3.5) {
+    /* THE HAND. Signed cm across the surface, divided by the mark's own
+       size, so the whole silhouette scales with the tool. y is flipped
+       because vArc climbs toward the rim and the hand's fingers point
+       up the pot. */
+    vec2 hp = vec2((fract(vAng - uCursor.x + 0.5) - 0.5) * 6.2831853 * max(vRad, 0.25),
+                   (vArc - uCursor.y) * uArcLen) / max(uCursor.z, 1e-3);
+    handMask = celSdHand(hp);
+    /* Outside only. Every other mark shape carries this test and the
+       hand did not, so it drew on the bore as well — and since the
+       meridian runs up the outer wall, over the rim and back DOWN the
+       inside, a hand resting plainly on the outside had a twin printed
+       within. vSide: 0 outer, 1 rim, 2 inner, 3 base. */
+    if (vSide > 1.5) handMask = 9.0;
+    d = 9.0;                  // the ring code below draws nothing for a hand
+  } else if (uCursorBand > 2.5) {
     // POUR: a ribbon down one side, starting where you point. Nothing
     // above that line, and nothing on the inside wall -- glaze runs down.
     d = dAng / max(uCursor.z, 1e-3);
@@ -561,6 +616,24 @@ if (uStressView > 0.01) {
      what it was reported as. What the mark has to say is "the edge of
      what you are about to touch is here", and an edge is a line. */
   float ring = sstep(1.04, 0.96, d) * sstep(0.86, 0.94, d);
+  /* The hand reads as a shadow with a lit edge: a hand between the lamp
+     and the clay is a darker patch, and the rim is where the light gets
+     past it. Drawn that way it sits ON the pot instead of floating over
+     it, and it does not need to be bright to be seen — which was the
+     complaint about the halo it replaces. */
+  if (handMask > -0.5) {
+    float aa = fwidth(handMask) * 1.2 + 1e-4;
+    float inside = sstep(aa, -aa, handMask);            // 1 within the hand
+    float edge   = sstep(aa * 2.6, 0.0, abs(handMask)); // the outline itself
+    /* A soft contact shadow just outside the silhouette, so the hand
+       sits ON the clay rather than being printed on it. The falloff is
+       in the same units the field is measured in, so it holds its size
+       whatever the mark is scaled to. */
+    float contact = sstep(0.16, 0.0, handMask) * (1.0 - inside);
+    S.albedo *= mix(1.0, 0.60, inside * uCursor.w);
+    S.albedo *= mix(1.0, 0.86, contact * 0.7 * uCursor.w);
+    S.emis   += vec3(0.34, 0.80, 0.74) * edge * 0.13 * uCursor.w;
+  }
   // Quietly, and quieter still than before. It marks where your hand is;
   // it is not meant to be the brightest thing in the room. Photographed
   // in the glaze room it was outshining the glaze it was pointing at —

@@ -48,6 +48,9 @@ const BAND_NOTCH = Math.PI / 30;   // 6 degrees
 
    shape matches uCursorBand in potMaterial.js:
      0 spot · 2 curtain down one side · 3 ribbon running down. */
+/* shape 4 is the hand silhouette; 0 spot, 1 band, 2 curtain, 3 ribbon */
+const HAND_SHAPE = 4;
+
 const GLAZE_TOOLS = {
   brush: { shape: 0, rad: 0.075 },
   wax:   { shape: 0, rad: 0.06 },
@@ -1617,10 +1620,17 @@ export class Game {
     // A band round the pot at the height the hand is working, taken
     // from the hand's own position on the profile — so it follows you
     // down into the bore, and there is no side for it to jump to.
+    /* A hand, where the hand is.
+       This was a band right round the pot — a stripe that says "at about
+       this height" and nothing about what is touching. The thing
+       touching is a hand, so the pot shows one, at the angle the hand is
+       actually at rather than smeared over every side at once.
+       Size is in centimetres of surface: a hand is about 9 cm across a
+       palm, and it grows a little as you press. */
     u.uArcLen.value = this.pb.arcLen || 24;
-    u.uCursorBand.value = 1;
-    u.uCursor.value.set(0, this.tool.arcT,
-      0.55 + 0.40 * this.tool.press, this.tool.contact * 0.85 + 0.08);
+    u.uCursorBand.value = HAND_SHAPE;
+    u.uCursor.value.set(this._localAngle(this.tool.angle), this.tool.arcT,
+      4.6 + 1.1 * this.tool.press, this.tool.contact * 0.85 + 0.08);
 
     this.ghost.visible = this.showGhost && !!FORMS[this.commission?.require?.form] && !trimming;
 
