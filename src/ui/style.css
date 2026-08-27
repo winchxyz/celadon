@@ -790,32 +790,28 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radiu
 #boot-status{font:700 10px/1 var(--display);letter-spacing:.22em;color:var(--ink-dim);margin-top:1.5em;text-transform:uppercase}
 
 /* ---------------- the hand ----------------
+   The operating system's, not mine.
+
    A pottery game is a game about your hands, and the pointer over the
-   clay was the operating system's arrow — the one thing on screen that
-   belongs to a spreadsheet.
+   clay was an arrow — the one thing on screen that belongs to a
+   spreadsheet. I drew a replacement seven times and every one of them
+   came out a mitten: fingers of equal length and thickness, a palm that
+   was a rounded rectangle, a thumb that read as a lump on the side. At
+   sixteen pixels there is no room to be nearly right, and I was not
+   nearly right.
 
-   Drawn rather than borrowed, in the room's own two colours, so it
-   reads on both the dark shed and the cream panels: cream fill, cocoa
-   outline, the same pair everything else here is made of. Checked at
-   actual size against both backgrounds before it went in, which is how
-   the first version was caught — its fingers were open paths, so the
-   browser closed each one with a diagonal and the shed showed through
-   the gaps.
+   `grab` and `grabbing` are drawn by the platform. They are a real open
+   hand and a real closed one, they are what every map and every canvas
+   in the world uses for "you can take hold of this", they scale with
+   whatever cursor size the player has set in their own accessibility
+   settings, and they cost one line each.
 
-   The hotspot sits in the middle of the palm, because that is where a
-   hand looks like it is touching. And there is a second one for while
-   the button is down: the fingers curl. That state already had a rule
-   here — `body.grabbing canvas#gl{cursor:none}` — and nothing in the
-   game has ever added the class, so it has never once applied.
-
-   A keyword fallback follows each url(), so a browser that refuses SVG
-   cursors still gets a hand rather than an arrow. */
-canvas#gl{
-  cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='28' viewBox='0 0 26 28'%3E%3Cg fill='%23FBF0DF' stroke='%234A3524' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M9.4 19V5.6a1.9 1.9 0 1 1 3.8 0V19z'/%3E%3Cpath d='M13.2 19V4.2a1.9 1.9 0 1 1 3.8 0V19z'/%3E%3Cpath d='M17 15.7V6.8a1.9 1.9 0 1 1 3.8 0v8.9c0 5-3 8.4-7.4 8.4h-1.3c-2.7 0-4.3-1.1-5.6-3L3.6 16c-.7-1-.4-2.3.7-2.9 1-.6 2.3-.3 2.9.7l2.2 3.2z'/%3E%3C/g%3E%3C/svg%3E") 13 13, grab;
-}
-body.grabbing canvas#gl{
-  cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='28' viewBox='0 0 26 28'%3E%3Cg fill='%23FBF0DF' stroke='%234A3524' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M9.4 19v-6.8a1.9 1.9 0 1 1 3.8 0V19z'/%3E%3Cpath d='M13.2 19v-7.8a1.9 1.9 0 1 1 3.8 0V19z'/%3E%3Cpath d='M17 16.2v-4a1.9 1.9 0 1 1 3.8 0v3.5c0 5-3 8.4-7.4 8.4h-1.3c-2.7 0-4.3-1.1-5.6-3L3.6 16c-.7-1-.4-2.3.7-2.9 1-.6 2.3-.3 2.9.7l2.2 3.2z'/%3E%3C/g%3E%3C/svg%3E") 13 13, grabbing;
-}
+   The class-driven half stays, because that part was never the problem:
+   `body.grabbing` had a rule here for a long time and nothing in the
+   game ever added the class, so the pressed state has never once
+   applied. It is set and cleared with the pointer now. */
+canvas#gl{ cursor:grab; }
+body.grabbing canvas#gl{ cursor:grabbing; }
 
 /* Narrow windows.
    This was written for a small desktop window and then an iPad turned
