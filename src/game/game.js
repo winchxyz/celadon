@@ -329,6 +329,7 @@ export class Game {
         if (this.pointer.down) {
           this._dipHeld = false;
           this.pointer.down = false;
+          document.body.classList.remove('grabbing');
           this._onRelease();
         }
         this._pinch = this._pinchStart = touchGeometry();
@@ -498,6 +499,7 @@ export class Game {
       try { c.setPointerCapture?.(e.pointerId); } catch { /* not fatal */ }
       if (e.button === 2 || e.button === 1) { this.pointer.right = true; return; }
       this.pointer.down = true;
+      document.body.classList.add('grabbing');
       this._onPress();
     });
 
@@ -518,12 +520,14 @@ export class Game {
         return;
       }
       this.pointer.down = false;
+      document.body.classList.remove('grabbing');
       this._onRelease();
     };
     c.addEventListener('pointerup', up);
     c.addEventListener('pointercancel', up);
     window.addEventListener('blur', () => {
       this.pointer.down = false; this.pointer.right = false;
+      document.body.classList.remove('grabbing');
       this._touches.clear(); this._pinch = null;
     });
     c.addEventListener('contextmenu', (e) => e.preventDefault());
