@@ -18,6 +18,7 @@ import { NOISE, BUMP } from './glsl.js';
 import { K, RSEG } from './potMesh.js';
 import { SLOTS } from '../sim/glaze.js';
 import { P } from './palette.js';
+import { HAND_FIELD, HAND_RANGE } from './handField.js';
 
 export function createPotMaterial(opts = {}) {
   const mat = new THREE.MeshPhysicalMaterial({
@@ -100,6 +101,18 @@ export function createPotMaterial(opts = {}) {
     // curtain or a ribbon, since those are bounded round the pot and not
     // along it.
     uCursor: { value: new THREE.Vector4(-9, -9, 0, 0) },
+    /* The hand, traced from a picture by tools/trace-hand.mjs and baked
+       to a 128x128 distance field. One texture read, whatever shape the
+       reference happens to be — a polygon of the same outline would be
+       fifty-odd edges walked per fragment of the pot. */
+    uHandField: { value: null },
+    /* How the traced picture is turned before it is stamped on the pot.
+       x,y are the flips and z is a rotation in turns, so the same field
+       serves a left hand, a right one, and any lean. */
+    /* (-1,-1) found by trying all four flips against the pot and
+       looking: the traced picture faces the other way once it has been
+       through the PNG's top-down rows and the pot's own winding. */
+    uHandOrient: { value: new THREE.Vector3(-1, -1, 0) },
     uArcLen: { value: 24 },                              // meridian length, cm
     // 0 spot · 1 band round the pot · 2 curtain down one side · 3 ribbon
     // running down from the point. See GLAZE_TOOLS, which is where the
@@ -110,6 +123,33 @@ export function createPotMaterial(opts = {}) {
 
   mat.userData.u = U;
   mat.defines = { ...(mat.defines || {}), CEL_SLOTS: SLOTS };
+
+  /* Load the traced hand once, for every pot that will ever exist.
+     Linear filtering because the whole point of a distance field is
+     that it interpolates: a bilinear sample between two texels IS a
+     distance, which is why a 128x128 field draws a clean edge at any
+     size. Clamped, so sampling past the box returns the border value
+     rather than wrapping the hand round onto itself. */
+  /* ...but only where there is a document to decode it with.
+     TextureLoader builds an <img>, and the headless benches construct
+     this material with no DOM at all — eight of them died on
+     document.createElementNS the moment this was added. Building a
+     material must not require a browser; the mark simply does not draw
+     without one, and nothing headless looks at it. */
+  if (typeof document !== 'undefined' && typeof document.createElementNS === 'function') {
+    try {
+      const handTex = new THREE.TextureLoader().load(HAND_FIELD);
+      handTex.minFilter = THREE.LinearFilter;
+      handTex.magFilter = THREE.LinearFilter;
+      handTex.wrapS = THREE.ClampToEdgeWrapping;
+      handTex.wrapT = THREE.ClampToEdgeWrapping;
+      handTex.generateMipmaps = false;
+      handTex.colorSpace = THREE.NoColorSpace;   // a measurement, not a colour
+      U.uHandField.value = handTex;
+    } catch (e) {
+      console.warn('celadon: the hand field would not load', e);
+    }
+  }
 
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, U);
@@ -190,35 +230,22 @@ uniform float uFired, uCrystalScale, uCrystalSize, uCrazeScale, uRunSmear;
 uniform float uHeat, uTemp, uSoot, uStressView, uGuide, uOpacity, uClayGlow;
 uniform vec4 uCursor;
 /* ---- the hand mark ------------------------------------------------ */
-float celSdSeg(vec2 p, vec2 a, vec2 b, float r){
-  vec2 pa = p - a, ba = b - a;
-  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
-  return length(pa - ba * h) - r;
-}
-/* Smooth union. k is how much the two shapes melt into each other, and
-   it is the whole difference between a hand and a bundle of sticks. */
-float celSmin(float a, float b, float k){
-  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
-  return mix(b, a, h) - k * h * (1.0 - h);
-}
-/* p is in hand-lengths: 0 at the middle knuckle, +y toward the tips.
-   Proportions are a real hand's — middle longest, then ring, index,
-   little; thumb short, thick, and set low and wide. */
+uniform sampler2D uHandField;
+/* p is in half-widths of the traced box: -1..1 across the hand.
+   The field stores 0.5 at the silhouette; below is inside. */
+uniform vec3 uHandOrient;
 float celSdHand(vec2 p){
-  /* k, the blend radius, has to be SMALL against the finger radius or
-     the fingers melt into the palm and the whole thing is a bean. The
-     first version used 0.075 against a finger of 0.082 and that is
-     exactly what it drew. 0.022 keeps the knuckles soft and the fingers
-     separate. */
-  const float K = 0.022;
-  float d = celSdSeg(p, vec2(0.015, -0.44), vec2(0.0, -0.02), 0.250);   // palm
-  d = celSmin(d, celSdSeg(p, vec2(-0.205, 0.010), vec2(-0.285, 0.430), 0.070), K); // index
-  d = celSmin(d, celSdSeg(p, vec2(-0.062, 0.045), vec2(-0.090, 0.580), 0.074), K); // middle
-  d = celSmin(d, celSdSeg(p, vec2( 0.082, 0.035), vec2( 0.125, 0.500), 0.070), K); // ring
-  d = celSmin(d, celSdSeg(p, vec2( 0.205,-0.020), vec2( 0.288, 0.300), 0.060), K); // little
-  d = celSmin(d, celSdSeg(p, vec2(-0.190,-0.280), vec2(-0.505, 0.030), 0.096), K * 1.6); // thumb
-  return d;
+  float a = uHandOrient.z * 6.2831853;
+  float ca = cos(a), sa = sin(a);
+  p = vec2(p.x * ca - p.y * sa, p.x * sa + p.y * ca);
+  p *= uHandOrient.xy;
+  vec2 uv = p * 0.5 + 0.5;
+  uv.y = 1.0 - uv.y;                       // the PNG runs top-down
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 9.0;
+  float t = texture2D(uHandField, uv).r;
+  return ((t - 0.50196) / 0.49804) * ${HAND_RANGE.toFixed(5)};
 }
+
 uniform float uArcLen, uCursorBand;
 varying float vAng, vArc, vSecT, vSide, vCurv, vMoist, vScar, vStress, vRad, vHgt, vRing;
 varying vec3 vLocal;
@@ -627,7 +654,11 @@ if (uStressView > 0.01) {
      it, and it does not need to be bright to be seen — which was the
      complaint about the halo it replaces. */
   if (handMask > -0.5) {
-    float aa = fwidth(handMask) * 1.2 + 1e-4;
+    /* Clamped. The field is 9.0 outside its own box, so at the box edge
+       handMask jumps and fwidth goes enormous — which widened the edge
+       term until the box itself was drawn on the pot as a dashed
+       rectangle. */
+    float aa = clamp(fwidth(handMask) * 1.2, 0.0015, 0.06);
     float inside = sstep(aa, -aa, handMask);            // 1 within the hand
     float edge   = sstep(aa * 2.6, 0.0, abs(handMask)); // the outline itself
     /* A soft contact shadow just outside the silhouette, so the hand
