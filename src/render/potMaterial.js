@@ -643,45 +643,69 @@ float celIrid = S.irid;
 normal = bumpNormal(normal, -vViewPosition, celBump * 0.012, 1.0);
 `)
       .replace('#include <emissivemap_fragment>', 'totalEmissiveRadiance += celEmis;')
-      // ---- how light lands on something soft ----------------------
-      //
-      // Lambert puts a hard terminator on a curve: light on one side of
-      // it, nothing on the other. That edge is the single biggest cue
-      // that a surface is hard. Light entering clay travels a millimetre
-      // or two and comes back out, so the falloff is long and the far
-      // side of it glows warm rather than going black.
-      //
-      // w = 0.55 is the clay range. 0.3 is barely visible; 1.0 is full
-      // half-lambert and goes plasticky.
-      .replace(
-        'float dotNL = saturate( dot( geometryNormal, directLight.direction ) );',
+      ;
+
+    /* ================= THE PHYSICAL LIGHTING CHUNKS =================
+       Patched through their #include directives, because at
+       onBeforeCompile time that is all there is.
+
+       three resolves #include AFTER onBeforeCompile returns, so the
+       shader handed here still reads the directive and contains not one
+       line of what is inside it. Three replacements were written
+       against the resolved text and matched nothing, in silence: the
+       clay's wrap lighting, the warm light coming back through the
+       terminator, and the entire per-pixel clearcoat. Verified by
+       instrumenting a real compile — at that moment `#include <` is
+       present and `material.clearcoat =` is not. The clearcoat pair was
+       even wrapped in an if() testing for the missing string, so it
+       skipped itself and called that defensive. The pot has been
+       wearing a flat clearcoat of 1.0 everywhere instead of each
+       glaze's own.
+
+       Editing the chunk and substituting it for the directive is the
+       way that works. And an anchor that disappears in a three upgrade
+       now SAYS so instead of quietly turning the effect off again. */
+    const patch = (src, chunk, edits) => {
+      let body = THREE.ShaderChunk[chunk];
+      if (!body) { console.warn(`potMaterial: no shader chunk "${chunk}"`); return src; }
+      for (const [from, to] of edits) {
+        if (!body.includes(from)) {
+          console.warn(`potMaterial: anchor gone from ${chunk} — "${from.slice(0, 44)}" now patches nothing`);
+          continue;
+        }
+        body = body.replace(from, to);
+      }
+      return src.replace(`#include <${chunk}>`, body);
+    };
+
+    /* Lambert puts a hard terminator on a curve: light on one side of
+       it, nothing on the other. That edge is the single biggest cue
+       that a surface is hard. Light entering clay travels a millimetre
+       or two and comes back out, so the falloff is long and the far
+       side of it glows warm rather than going black.
+       w = 0.55 is the clay range. 0.3 is barely visible; 1.0 is full
+       half-lambert and goes plasticky. */
+    shader.fragmentShader = patch(shader.fragmentShader, 'lights_physical_pars_fragment', [
+      ['float dotNL = saturate( dot( geometryNormal, directLight.direction ) );',
         [
           'float rawNL = dot( geometryNormal, directLight.direction );',
           'const float clayWrap = 0.55;',
           'float dotNL = saturate((rawNL + clayWrap) / ((1.0 + clayWrap) * (1.0 + clayWrap)));',
-        ].join(String.fromCharCode(10))
-      )
-      .replace(
-        'vec3 irradiance = dotNL * directLight.color;',
+        ].join(String.fromCharCode(10))],
+      ['vec3 irradiance = dotNL * directLight.color;',
         [
           'vec3 irradiance = dotNL * directLight.color;',
-          '// the energy living past the true terminator is light that went',
-          '// through the clay, so it arrives carrying the pigment with it',
+          '// the energy past the true terminator went through the clay,',
+          '// so it arrives carrying the pigment with it',
           'irradiance *= mix(vec3(1.0), vec3(1.0, 0.62, 0.42), smoothstep(0.25, -0.35, rawNL));',
-        ].join(String.fromCharCode(10))
-      );
+        ].join(String.fromCharCode(10))],
+    ]);
 
-    // clearcoat is only compiled in when the material has it enabled;
-    // patch it defensively.
-    if (shader.fragmentShader.includes('material.clearcoat =')) {
-      shader.fragmentShader = shader.fragmentShader.replace(
-        /material\.clearcoat = clearcoat;/,
-        'material.clearcoat = clamp(celClear, 0.0, 1.0);'
-      ).replace(
-        /material\.clearcoatRoughness = clearcoatRoughness;/,
-        'material.clearcoatRoughness = clamp(celClearR, 0.02, 1.0);'
-      );
-    }
+    shader.fragmentShader = patch(shader.fragmentShader, 'lights_physical_fragment', [
+      ['material.clearcoat = clearcoat;', 'material.clearcoat = clamp(celClear, 0.0, 1.0);'],
+      ['material.clearcoatRoughness = clearcoatRoughness;',
+        'material.clearcoatRoughness = clamp(celClearR, 0.02, 1.0);'],
+    ]);
   };
 
   // force clearcoat + iridescence code paths to compile
