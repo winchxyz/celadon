@@ -9,6 +9,9 @@
 //  Run:  node src/dev/gametest.mjs
 // ============================================================
 
+import * as THREE from 'three';
+import { raycastPot } from '../sim/glazeField.js';
+import { SIDE } from '../render/potMesh.js';
 import {
   radiiAt, NS, game, rig, hudLog, DT,
   point, step, aim, dragCm, holdCm, dragPx, outwardPx, screenOf, M, camera, CAMERA,
@@ -156,17 +159,47 @@ check('the coach says something', !!hudLog.coach, `"${(hudLog.coach || '').slice
     `band=${u.uCursorBand.value}, arc ${low.toFixed(2)} -> ${high.toFixed(2)} up the wall, ` +
     `${turned.toFixed(2)} rev of wheel moved it ${wobble.toFixed(3)}`);
 
-  /* ...and the case the band existed to cover: a hand down the bore
-     must be marked on the INSIDE, not left printed on the outer wall. */
-  const [xo, yo] = aim(game.clay.maxR * 0.9, Math.max(3, game.clay.height * 0.5));
-  point(xo, yo); step(3);
-  const outsideBand = u.uCursorBand.value;
-  const [xi, yi] = aim(Math.max(0.4, game.clay.maxR * 0.2), Math.max(3, game.clay.height * 0.5));
-  point(xi, yi); step(3);
-  const insideBand = u.uCursorBand.value;
-  check('the mark is on the face the hand is on',
-    outsideBand === 4 && insideBand === 5,
-    `hand on the wall -> ${outsideBand} (want 4), hand in the bore -> ${insideBand} (want 5)`);
+  /* ...and the face the mark is drawn on must be the face the ray
+     actually struck.
+     This used to aim at a screen point derived from a radius of 0.2 of
+     the widest, halfway up, and demand the INSIDE band. From a side
+     view that point is behind the front wall, so a ray to it meets the
+     outside first — the old check passed only because the face was
+     chosen from the cursor's RADIUS rather than from what the ray met,
+     and that same reasoning put the mark on the bore whenever the
+     player aimed at the middle of the silhouette, where nothing outside
+     the pot can see it. That was the bug: the hand was drawing all
+     along, on the far side of the wall.
+     The scenario the old check described is also out of reach: the
+     camera stops at phi 0.70 (engine.js limits it, because the hand
+     stops following the cursor at steeper angles), and at 0.70 the ray
+     meets the RIM, never the bore. So the invariant is tested instead
+     of the unreachable case — whatever the ray hits, the band agrees
+     with it. */
+  const faces = [];
+  for (const [r, y] of [[game.clay.maxR * 0.9, game.clay.height * 0.5],
+                        [game.clay.maxR * 0.5, game.clay.height * 0.3],
+                        [game.clay.maxR * 0.2, game.clay.height * 0.7],
+                        [game.clay.maxR * 0.95, game.clay.height * 0.8]]) {
+    const [px, py] = aim(Math.max(0.3, r), Math.max(1, y));
+    point(px, py); step(3);
+    const dir = new THREE.Vector3(game.pointer.nx, game.pointer.ny, 0.5)
+      .unproject(game.eng.camera).sub(game.eng.camera.position).normalize();
+    const org = game.eng.camera.position.clone().sub(game.pot.position);
+    const h = raycastPot(org, dir, game.pb);
+    const side = h.hit ? game.pb.sideOf(h.k) : null;
+    const wantOutside = side === null ? null
+      : (side === SIDE.OUTER || side === SIDE.BASE || side === SIDE.RIM);
+    const band = u.uCursorBand.value;
+    faces.push({ side, wantOutside, band,
+      ok: wantOutside === null ? true : band === (wantOutside ? 4 : 5) });
+  }
+  const outsideBand = faces[0].band;
+  const agree = faces.filter((f) => f.ok).length;
+  check('the mark is drawn on the face the ray struck',
+    agree === faces.length,
+    `${agree}/${faces.length} aims agree; ` +
+    faces.map((f) => `${f.side === null ? 'miss' : ['out','rim','in','base'][f.side]}->${f.band}`).join(' '));
 }
 
 // ---- dragging down brings a too-tall pot back down ------------------

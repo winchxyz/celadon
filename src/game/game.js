@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { clamp, clamp01, lerp, damp, smoothstep, fmt, pct, makeRng, TAU, blackbodyRGB } from '../core/util.js';
 import { Clay, NS, STAGE, W_CRIT } from '../sim/clay.js';
 import { Hand, radiiAt } from '../sim/hand.js';
-import { potGeometry, ProfileBuffer, proportions } from '../render/potMesh.js';
+import { potGeometry, ProfileBuffer, proportions, SIDE } from '../render/potMesh.js';
 import { createPotMaterial, applyFireResult } from '../render/potMaterial.js';
 import { GlazeField, raycastPot } from '../sim/glazeField.js';
 import {
@@ -1506,9 +1506,7 @@ export class Game {
        You are only looking INTO a pot through its mouth, so that is the
        test: near the rim, and inside the bore's own radius. Everywhere
        else on the piece you are looking at its outer wall. */
-    const rimY = this.pb.top || c.height;
-    const nearMouth = this.tool.y > rimY - Math.max(0.6, c.height * 0.12);
-    this.tool.outside = !(opened && nearMouth && this.tool.r < ri * 0.92);
+    this.tool.outside = this.tool.r >= (ri + ro) * 0.5;
     this.tool.arcT = this.pb.nearest(this.tool.r, this.tool.y, this.tool.outside).arcT;
     this.tool.contact = Hand.contact(c, this.tool.r, this.tool.y, ro);
 
@@ -1666,7 +1664,23 @@ export class Game {
     const mOrg = this._v3 || (this._v3 = new THREE.Vector3());
     mOrg.copy(this.eng.camera.position).sub(this.pot.position);
     const mHit = raycastPot(mOrg, mDir, this.pb);
-    u.uCursorBand.value = HAND_SHAPE + (this.tool.outside ? 0 : 1);
+    /* Which face the picture goes on is answered by the ray, not by the
+       radius. tool.r is the closest approach to the wheel axis, so
+       pointing at the middle of the silhouette gives nearly zero and
+       the old test `r >= (ri+ro)/2` read that as "inside" — the hand
+       was painted on the bore, where nothing outside the pot can see
+       it, which is exactly why it looked as though it was not drawing.
+       My first repair was a rule about being near the mouth, and it
+       broke the opposite case: a hand working DOWN the neck is nowhere
+       near the rim, and gametest caught it.
+       raycastPot already reports which profile station it struck, and
+       that is the whole question — the outer wall when you are looking
+       at the pot, the bore when you are looking into it. */
+    const markSide = mHit.hit ? this.pb.sideOf(mHit.k) : null;
+    const markOutside = markSide === null
+      ? this.tool.outside
+      : (markSide === SIDE.OUTER || markSide === SIDE.BASE || markSide === SIDE.RIM);
+    u.uCursorBand.value = HAND_SHAPE + (markOutside ? 0 : 1);
     /* Small, and always faintly there.
        Two things were wrong. uCursor.z is the mark's HALF width and the
        comment above reasoned about a whole palm, so 4.6 drew a hand
