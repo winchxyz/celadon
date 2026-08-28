@@ -1635,8 +1635,19 @@ export class Game {
        on the outer wall while the hand was working down the bore. A
        hand shape cannot be sideless, so it is told: 4 outside, 5 in. */
     u.uCursorBand.value = HAND_SHAPE + (this.tool.outside ? 0 : 1);
+    /* Small, and always faintly there.
+       Two things were wrong. uCursor.z is the mark's HALF width and the
+       comment above reasoned about a whole palm, so 4.6 drew a hand
+       9.2cm across — twice life size, and on a 9cm pot that is the
+       whole piece. And the strength was contact*0.85+0.08, so a hand
+       resting without pressing came through at 0.08: mix(1.0,0.60,0.08)
+       is 0.968, which is nothing. All that showed was a thin outline,
+       and a thin outline of something that large reads as a stray
+       squiggle rather than as a hand.
+       A little hand, quietly present, and it firms up as you lean on
+       it. */
     u.uCursor.value.set(this._localAngle(this.tool.angle), this.tool.arcT,
-      4.6 + 1.1 * this.tool.press, this.tool.contact * 0.85 + 0.08);
+      1.45 + 0.35 * this.tool.press, this.tool.contact * 0.55 + 0.32);
 
     this.ghost.visible = this.showGhost && !!FORMS[this.commission?.require?.form] && !trimming;
 
