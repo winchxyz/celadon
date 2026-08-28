@@ -1494,7 +1494,21 @@ export class Game {
     // Which face the hand is on decides which end of the profile the
     // mark belongs at — the outer and inner faces of one ring are a
     // wall's thickness apart in space and half a profile apart in arc.
-    this.tool.outside = this.tool.r >= (ri + ro) * 0.5;
+    /* Which face you can SEE, not which side of the wall's midline the
+       cursor's radius falls on.
+       The cursor is placed by asking where its ray runs closest to the
+       wheel axis, so pointing at the MIDDLE of the pot's silhouette —
+       which is what anyone does — gives a radius near zero. Tested
+       against the wall's midline that reads as "inside", and the mark
+       was drawn on the bore, where it cannot be seen from outside. That
+       is the whole reason the hand appeared to be missing: it was being
+       painted on the inside of the pot the entire time.
+       You are only looking INTO a pot through its mouth, so that is the
+       test: near the rim, and inside the bore's own radius. Everywhere
+       else on the piece you are looking at its outer wall. */
+    const rimY = this.pb.top || c.height;
+    const nearMouth = this.tool.y > rimY - Math.max(0.6, c.height * 0.12);
+    this.tool.outside = !(opened && nearMouth && this.tool.r < ri * 0.92);
     this.tool.arcT = this.pb.nearest(this.tool.r, this.tool.y, this.tool.outside).arcT;
     this.tool.contact = Hand.contact(c, this.tool.r, this.tool.y, ro);
 
@@ -1634,6 +1648,24 @@ export class Game {
        jump across the piece as the cursor crossed the middle, and sat
        on the outer wall while the hand was working down the bore. A
        hand shape cannot be sideless, so it is told: 4 outside, 5 in. */
+    /* Where the mark GOES is a different question from where the hand
+       WORKS, and they need different geometry.
+       Shaping needs the meridian, so tool.r/y come from the closest
+       approach of the ray to the wheel axis — a plane through the axis
+       is undefined for a ray down the middle of the pot, which is where
+       the player spends most of their time. But that construction gives
+       a bearing that degenerates in exactly the same place: aim at the
+       centre of the silhouette and the angle swings out to the rim, so
+       the hand was drawn on the edge of the pot, nearly side-on to the
+       camera, and read as not being there at all.
+       The mark is a picture, so it is placed where the ray actually
+       MEETS the clay — the same raycast the glaze room paints with. */
+    const mDir = this._v2 || (this._v2 = new THREE.Vector3());
+    mDir.set(this.pointer.nx, this.pointer.ny, 0.5)
+      .unproject(this.eng.camera).sub(this.eng.camera.position).normalize();
+    const mOrg = this._v3 || (this._v3 = new THREE.Vector3());
+    mOrg.copy(this.eng.camera.position).sub(this.pot.position);
+    const mHit = raycastPot(mOrg, mDir, this.pb);
     u.uCursorBand.value = HAND_SHAPE + (this.tool.outside ? 0 : 1);
     /* Small, and always faintly there.
        Two things were wrong. uCursor.z is the mark's HALF width and the
@@ -1646,7 +1678,8 @@ export class Game {
        squiggle rather than as a hand.
        A little hand, quietly present, and it firms up as you lean on
        it. */
-    u.uCursor.value.set(this._localAngle(this.tool.angle), this.tool.arcT,
+    u.uCursor.value.set(mHit.hit ? this._localAngle(mHit.angle) : this._localAngle(this.tool.angle),
+      mHit.hit ? mHit.arcT : this.tool.arcT,
       1.45 + 0.35 * this.tool.press, this.tool.contact * 0.55 + 0.32);
 
     this.ghost.visible = this.showGhost && !!FORMS[this.commission?.require?.form] && !trimming;
